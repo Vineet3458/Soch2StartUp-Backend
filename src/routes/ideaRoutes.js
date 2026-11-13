@@ -9,6 +9,10 @@ router.use(protect);
 router.route("/").post(createIdea).get(getMyIdeas);
 router.get("/compare", compareIdeas); // must stay above "/:id"
 router.route("/:id").get(getIdea).delete(deleteIdea);
-router.post("/:id/feedback", authorize(ROLES.MENTOR, ROLES.EXPERT), addFeedback);
+router.post(
+  "/:id/feedback",
+  authorize(ROLES.MENTOR, ROLES.EXPERT, ROLES.ADMIN, ROLES.SUPERADMIN, ROLES.MODERATOR),
+  addFeedback
+);
 
 export default router;
