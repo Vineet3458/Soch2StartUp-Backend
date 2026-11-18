@@ -99,7 +99,7 @@ export const openDispute = async (req, res) => {
   const a = await Assignment.findOneAndUpdate({ idea: fb.idea._id, assignee: fb.author, kind: "evaluation" }, { reEval: true, stage: "assigned" }, { new: true });
   audit(req.user, "feedback.disputed", fb.idea.title, reason);
   notify(fb.author, { type: "warning", title: "Your evaluation was disputed", message: `"${fb.idea.title}": ${reason}`, link: "/app/disputes" });
-  emit("feedback", "update", fb._id); if (a) emit("assignments", "update", a._id);
+  emit("feedback", "update", fb._id); if (a) emit("assignments", "update", a._id); emit("ideas", "update", fb.idea._id || fb.idea);
   res.json(fb);
 };
 
@@ -115,6 +115,6 @@ export const resolveDispute = async (req, res) => {
   const a = await Assignment.findOneAndUpdate({ idea: fb.idea._id, assignee: fb.author, kind: "evaluation" }, { reEval: false, stage: "completed", completedAt: new Date() }, { new: true });
   audit(req.user, "feedback.dispute_resolved", fb.idea.title);
   notify(fb.idea.user, { type: "success", title: "Your dispute was answered", message: `"${fb.idea.title}": ${response}`, link: `/app/ideas/${fb.idea._id}` });
-  emit("feedback", "update", fb._id); if (a) emit("assignments", "update", a._id);
+  emit("feedback", "update", fb._id); if (a) emit("assignments", "update", a._id); emit("ideas", "update", fb.idea._id || fb.idea);
   res.json(fb);
 };

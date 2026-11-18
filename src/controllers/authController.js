@@ -81,5 +81,6 @@ export const changePassword = async (req, res) => {
   user.password = newPassword;
   await user.save();
   audit(user, "user.password_changed", user.email);
+  emit("users", "update", user._id);
   res.json({ message: "Password updated" });
 };

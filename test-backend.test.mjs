@@ -9,6 +9,7 @@ const MONGO = process.env.MONGO_URI_TEST || "mongodb://127.0.0.1:27017/soch2star
 process.env.MONGO_URI = MONGO;
 process.env.JWT_SECRET = "test-secret";
 process.env.GEMINI_API_KEY = "";
+process.env.PORT = "0";
 
 let base, server;
 const tok = {};

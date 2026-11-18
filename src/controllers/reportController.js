@@ -62,7 +62,7 @@ export const resolveReport = async (req, res) => {
     }
     if (r.targetType === "feedback" && action === "remove") {
       const f = await Feedback.findByIdAndUpdate(r.target, { status: "removed" });
-      if (f) { notify(f.author, { type: "warning", title: "Your feedback was removed", message: note || "It violated community guidelines." }); emit("feedback", "delete", f._id); }
+      if (f) { notify(f.author, { type: "warning", title: "Your feedback was removed", message: note || "It violated community guidelines." }); emit("feedback", "delete", f._id); emit("ideas", "update", f.idea); }
     }
     if (r.targetType === "user") {
       if (action === "warn") notify(r.target, { type: "warning", title: "Community guidelines warning", message: note || "Please review the community guidelines." , link: "/app/resources?kind=guideline" });

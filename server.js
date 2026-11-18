@@ -38,13 +38,19 @@ if (process.env.SERVE_CLIENT === "true" && fs.existsSync(dist)) {
 app.use(notFound);
 app.use(errorHandler);
 
-export const start = async () => {
+export const start = async (port) => {
   await connectDB();
   await loadConfig();
-  const PORT = process.env.PORT || 5000;
-  const server = app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
-  syslog("info", "server.started", `API listening on :${PORT}`);
-  return server;
+  const PORT = port ?? (process.env.PORT !== undefined && process.env.PORT !== "" ? process.env.PORT : 5000);
+  return new Promise((resolve, reject) => {
+    const server = app.listen(PORT, () => {
+      const p = server.address()?.port || PORT;
+      console.log(`Server running on port ${p}`);
+      syslog("info", "server.started", `API listening on :${p}`);
+      resolve(server);
+    });
+    server.on("error", reject);
+  });
 };
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) start();

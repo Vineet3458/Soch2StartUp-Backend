@@ -12,10 +12,10 @@ const write = (client, event, data) => {
   try { client.res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`); } catch { clients.delete(client); }
 };
 
-// Public (logged-out) clients only ever receive "config" changes so the landing page stays live.
+// Public (logged-out) clients receive config, ideas and users changes so landing page stats stay live.
 export const emit = (topic, action = "update", id = null) => {
   for (const c of clients) {
-    if (c.isPublic && topic !== "config") continue;
+    if (c.isPublic && !["config", "ideas", "users"].includes(topic)) continue;
     write(c, "change", { topic, action, id: id ? String(id) : null, at: Date.now() });
   }
 };

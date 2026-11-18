@@ -39,6 +39,7 @@ export const updateAssignment = async (req, res) => {
   if (stage === "completed" && a.kind === "mentor") notify(a.idea.user, { type: "success", title: "Mentoring completed", message: `Your mentor marked "${a.idea.title}" as completed.`, link: `/app/ideas/${a.idea._id}` });
   audit(req.user, "assignment.updated", a.idea.title, `${a.kind} -> ${a.stage}`);
   emit("assignments", "update", a._id);
+  emit("ideas", "update", a.idea._id || a.idea);
   res.json(a);
 };
 
@@ -50,6 +51,7 @@ export const requestReEval = async (req, res) => {
   audit(req.user, "assignment.re_eval", a.idea.title);
   notify(a.assignee, { type: "warning", title: "Re-evaluation requested", message: `Please re-evaluate "${a.idea.title}".`, link: "/app/evaluations?f=re" });
   emit("assignments", "update", a._id);
+  emit("ideas", "update", a.idea._id || a.idea);
   res.json(a);
 };
 

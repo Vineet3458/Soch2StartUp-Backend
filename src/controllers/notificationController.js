@@ -1,8 +1,11 @@
 import Notification from "../models/Notification.js";
-import { emitTo } from "../services/realtime.js";
+import { emit, emitTo } from "../services/realtime.js";
 import { needId } from "../utils.js";
 
-const touch = (userId) => emitTo(String(userId), "change", { topic: "notifications", action: "update" });
+const touch = (userId) => {
+  emitTo(String(userId), "change", { topic: "notifications", action: "update" });
+  emit("notifications", "update");
+};
 
 export const listNotifications = async (req, res) => {
   const items = await Notification.find({ user: req.user._id }).sort("-createdAt").limit(100);
