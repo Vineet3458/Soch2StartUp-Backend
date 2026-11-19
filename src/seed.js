@@ -62,7 +62,8 @@ const run = async () => {
   for (const u of USERS) {
     let doc = await User.findOne({ email: u.email.toLowerCase() });
     if (!doc) {
-      const { key, days, ...rest } = u;
+      const { days, ...rest } = u;
+      delete rest.key;
       doc = await User.create({ ...rest, verified: rest.verified ?? true, createdAt: ago(days), lastLoginAt: ago(Math.random() * 3) });
     }
     U[u.key] = doc;
@@ -96,13 +97,13 @@ const run = async () => {
   await learn.save();
 
   const A = async (idea, user, kind, stage, extra = {}) => Assignment.create({ idea: idea._id, assignee: user._id, kind, stage, assignedBy: U.admin._id, createdAt: ago(extra.days ?? 5), ...extra });
-  const aKrishiM = await A(krishi, U.mentor, "mentor", "in_progress", { days: 18 });
+  await A(krishi, U.mentor, "mentor", "in_progress", { days: 18 });
   await A(learn, U.mentor, "mentor", "completed", { days: 9, completedAt: ago(2) });
   await A(kirana, U.mentor, "mentor", "assigned", { days: 2, dueDate: inDays(6) });
   await A(ship, U.mentor2, "mentor", "assigned", { days: 1 });
   await A(fpo, U.mentor, "mentor", "archived", { days: 6 });
-  const aKrishiE = await A(krishi, U.expert2, "evaluation", "completed", { days: 19, completedAt: ago(17) });
-  const aKiranaE = await A(kirana, U.expert, "evaluation", "assigned", { days: 4, reEval: true });
+  await A(krishi, U.expert2, "evaluation", "completed", { days: 19, completedAt: ago(17) });
+  await A(kirana, U.expert, "evaluation", "assigned", { days: 4, reEval: true });
   await A(quick, U.expert, "evaluation", "assigned", { days: 3, dueDate: inDays(4) });
   await A(learn, U.expert, "evaluation", "completed", { days: 9, completedAt: ago(7) });
   await A(ship, U.expert, "evaluation", "in_progress", { days: 1 });
@@ -115,7 +116,7 @@ const run = async () => {
   };
   await ev(krishi, U.expert2, crit(9, 8, 8, 7, 8, 8), "Strong, well-evidenced problem with a clear wedge via WhatsApp. Monetisation through FPOs is credible; validate farmer willingness to pay early.", "strong_yes", 17);
   await ev(learn, U.expert, crit(8, 7, 6, 8, 7, 7), "Solid traction path and low-cost delivery model. Differentiation vs. large players needs sharper articulation.", "yes", 7);
-  const disputed = await ev(kirana, U.expert, crit(6, 7, 5, 6, 6, 6), "Interesting underwriting angle but the evaluation finds credit risk controls underdeveloped for a first-time lender.", "maybe", 3,
+  await ev(kirana, U.expert, crit(6, 7, 5, 6, 6, 6), "Interesting underwriting angle but the evaluation finds credit risk controls underdeveloped for a first-time lender.", "maybe", 3,
     { dispute: { status: "open", by: U.f3._id, reason: "The scorecard ignored our NBFC partner's risk model described in the plan. Please re-evaluate.", at: ago(1) } });
   const g = (idea, author, comment, tags, days) => Feedback.create({ idea: idea._id, author: author._id, authorName: author.name, authorRole: author.role, kind: "guidance", comment, tags, createdAt: ago(days) });
   const gBad = await g(krishi, U.mentor, "Skip customer interviews and start spending on ads immediately.", ["growth"], 1);
@@ -147,7 +148,7 @@ const run = async () => {
   const saver = await Resource.findOne({ title: "Lean Canvas Template" });
   saver.savedBy = [U.f1._id, U.f2._id]; await saver.save();
 
-  const report1 = await Report.create({ targetType: "idea", target: swipe._id, idea: swipe._id, reporter: U.f2._id, reason: "Spam / low effort", details: "Looks like a copy of an existing social app with no new angle." });
+  await Report.create({ targetType: "idea", target: swipe._id, idea: swipe._id, reporter: U.f2._id, reason: "Spam / low effort", details: "Looks like a copy of an existing social app with no new angle." });
   await Idea.updateOne({ _id: swipe._id }, { flagged: true });
   await Report.create({ targetType: "feedback", target: gBad._id, idea: krishi._id, reporter: U.f1._id, reason: "Harmful advice", details: "Telling founders to skip customer interviews is unhelpful." });
   await Report.create({ targetType: "user", target: U.blocked._id, reporter: U.f4._id, reason: "Harassment", details: "Sent unsolicited promotional messages." });
@@ -190,7 +191,6 @@ const run = async () => {
     L("system", "error", null, "server.error", "", "POST /api/ideas: timeout while contacting webhook", 1),
     L("system", "info", null, "webhook.delivery", "", "idea.created -> 200", 1),
   ]);
-  void aKrishiM; void aKrishiE; void aKiranaE; void disputed; void report1; void study; void fpo;
   summary();
 };
 

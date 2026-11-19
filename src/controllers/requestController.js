@@ -1,7 +1,6 @@
 import Request from "../models/Request.js";
 import User from "../models/User.js";
 import Assignment from "../models/Assignment.js";
-import Idea from "../models/Idea.js";
 import { ROLES, ADMIN_ROLES } from "../config/roles.js";
 import { hasPermission } from "../services/configService.js";
 import { audit } from "../services/logger.js";

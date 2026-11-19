@@ -22,7 +22,7 @@ export const app = express();
 if (process.env.TRUST_PROXY) app.set("trust proxy", Number(process.env.TRUST_PROXY) || 1);
 
 app.use(helmet({ contentSecurityPolicy: false, crossOriginResourcePolicy: { policy: "cross-origin" } }));
-app.use(cors({ origin: (process.env.CLIENT_URL || "http://localhost:5173").split(","), credentials: true }));
+app.use(cors({ origin: (process.env.CLIENT_URL || "http://localhost:5173,http://127.0.0.1:5173").split(","), credentials: true }));
 app.use(express.json({ limit: "200kb" }));
 app.use(metricsMiddleware);
 

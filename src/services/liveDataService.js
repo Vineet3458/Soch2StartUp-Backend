@@ -74,14 +74,12 @@ export const parseDuckDuckGo = (html) => {
 const viaScraping = async (queries, maxResults, timeoutMs) => {
   const results = [];
   for (const q of queries) {
-    try {
-      const html = await (await fetchWithTimeout(`https://html.duckduckgo.com/html/?q=${encodeURIComponent(q)}`, {
-        headers: { "User-Agent": UA, "Accept-Language": "en-IN,en;q=0.9" },
-      }, timeoutMs)).text();
-      for (const r of parseDuckDuckGo(html)) {
-        if (!results.some((x) => x.url === r.url)) results.push(r);
-      }
-    } catch (e) { /* collected in the caller's errors list */ throw e; }
+    const html = await (await fetchWithTimeout(`https://html.duckduckgo.com/html/?q=${encodeURIComponent(q)}`, {
+      headers: { "User-Agent": UA, "Accept-Language": "en-IN,en;q=0.9" },
+    }, timeoutMs)).text();
+    for (const r of parseDuckDuckGo(html)) {
+      if (!results.some((x) => x.url === r.url)) results.push(r);
+    }
   }
   return results.slice(0, maxResults);
 };
@@ -154,7 +152,7 @@ const scrapeSites = async (results, maxPages, timeoutMs) => {
 
 /* -------------------------------- summary ---------------------------- */
 
-const buildSummary = (idea, market, sources, queries) => {
+const buildSummary = (market, sources, queries) => {
   const search = sources.filter((s) => s.kind === "search").slice(0, 8);
   const sites = sources.filter((s) => s.kind === "officialSite").slice(0, 3);
   const parts = [
@@ -177,7 +175,7 @@ export const collectLiveData = async (idea = {}, engine = {}) => {
   const cfg = engine.liveData || {};
   const market = engine.market || "India";
   const maxResults = Math.max(1, Math.min(Number(cfg.maxResults) || 8, 20));
-  const maxPages = Math.max(0, Math.min(Number(cfg.maxPages) ?? 3, 8));
+  const maxPages = Math.max(0, Math.min(Number(cfg.maxPages ?? 3), 8));
   const timeoutMs = Math.max(2000, Math.min(Number(cfg.timeoutMs) || 8000, 20000));
   const wantSites = !Array.isArray(cfg.sources) || cfg.sources.includes("officialSites");
   const queries = buildQueries(idea, market);
@@ -219,7 +217,7 @@ export const collectLiveData = async (idea = {}, engine = {}) => {
       kind: s.kind,
       ...(s.siteText ? { siteText: s.siteText } : {}),
     })),
-    summary: sources.length ? buildSummary(idea, market, sources, queries) : "",
+    summary: sources.length ? buildSummary(market, sources, queries) : "",
     errors,
   };
 

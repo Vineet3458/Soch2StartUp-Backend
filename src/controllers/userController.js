@@ -1,8 +1,7 @@
 import User from "../models/User.js";
 import Idea from "../models/Idea.js";
 import Assignment from "../models/Assignment.js";
-import { ROLES, ADMIN_ROLES, VERIFY_ROLES } from "../config/roles.js";
-import { hasPermission } from "../services/configService.js";
+import { ROLES, ADMIN_ROLES } from "../config/roles.js";
 import { audit } from "../services/logger.js";
 import { notify } from "../services/notify.js";
 import { emit } from "../services/realtime.js";
