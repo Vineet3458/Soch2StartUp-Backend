@@ -50,7 +50,24 @@ export const DEFAULT_CONFIG = {
     weights: { marketDemand: 30, competition: 15, feasibility: 20, financial: 20, risk: 15 },
     thresholds: { go: 70, improve: 50 },
   },
-  engine: { provider: "gemini", enabled: true, model: "gemini-2.0-flash", temperature: 0.4, fallbackToDemo: true, market: "India" },
+  engine: {
+    // "council" = 3-4 LLMs + live web data (default), "single" = one Gemini model, "demo" = offline analysis
+    mode: "council",
+    enabled: true,
+    provider: "gemini", // legacy: used only in "single" mode
+    model: "gemini-2.0-flash",
+    temperature: 0.4,
+    fallbackToDemo: true,
+    market: "India",
+    aggregation: "weighted",
+    liveData: { enabled: true, maxResults: 8, maxPages: 3, timeoutMs: 8000, sources: ["search", "officialSites"] },
+    models: [
+      { id: "gpt", name: "GPT-4o mini", provider: "openrouter", model: "openai/gpt-4o-mini", weight: 1, enabled: true },
+      { id: "claude", name: "Claude 3.5 Haiku", provider: "openrouter", model: "anthropic/claude-3.5-haiku", weight: 1, enabled: true },
+      { id: "gemini", name: "Gemini 2.0 Flash", provider: "openrouter", model: "google/gemini-2.0-flash-001", weight: 1, enabled: true },
+      { id: "llama", name: "Llama 3.3 70B", provider: "openrouter", model: "meta-llama/llama-3.3-70b-instruct", weight: 0.75, enabled: true },
+    ],
+  },
   categories: [
     { name: "FoodTech", enabled: true, color: "#f59e0b" },
     { name: "EdTech", enabled: true, color: "#6366f1" },

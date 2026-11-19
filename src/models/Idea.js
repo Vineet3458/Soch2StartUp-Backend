@@ -5,8 +5,20 @@ const reportSchema = new mongoose.Schema(
   {
     score: Number,
     verdict: { type: String, enum: ["GO", "IMPROVE", "AVOID"] },
-    source: { type: String, default: "demo" }, // "gemini" | "demo"
+    source: { type: String, default: "demo" }, // "gemini" | "demo" | "council"
     generatedAt: { type: Date, default: Date.now },
+    confidence: Number, // council agreement + model coverage (0-100)
+    consensus: { modelsUsed: Number, agreement: Number, coverage: Number },
+    models: [{
+      id: String, name: String, provider: String, model: String,
+      weight: Number, ms: Number, score: Number, verdict: String, metrics: Object,
+    }],
+    failedModels: [{ name: String, error: String }],
+    liveData: {
+      mode: String, collectedAt: Date, summary: String,
+      queries: [String], errors: [String],
+      sources: [{ title: String, url: String, domain: String, snippet: String, kind: String, siteText: String }],
+    },
     metrics: {
       marketDemand: Number,
       competition: Number, // higher = less competition

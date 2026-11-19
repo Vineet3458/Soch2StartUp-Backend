@@ -1,8 +1,13 @@
-// Idea validation engine. Uses Gemini when a key is configured, otherwise a deterministic,
-// idea-aware demo analysis. Scoring weights/thresholds come from the live Scoring Configuration.
+// Idea validation engine.
+//  - "council" mode (default): collect live web data, send the same enriched
+//    prompt to 3-4 LLMs through OpenRouter, then aggregate their predictions.
+//  - "single" / "demo" modes are kept for backwards compatibility.
+// Scoring weights/thresholds come from the live Scoring Configuration.
 import { getConfig } from "./configService.js";
 import { recordAi } from "./metrics.js";
 import { syslog } from "./logger.js";
+import { collectLiveData } from "./liveDataService.js";
+import { callModel, keyForProvider } from "./modelProviders.js";
 
 const METRIC_KEYS = ["marketDemand", "competition", "feasibility", "financial", "risk"];
 const clamp = (n) => Math.max(0, Math.min(100, Math.round(Number(n) || 0)));
@@ -17,15 +22,20 @@ export const computeScore = (metrics, scoring = getConfig("scoring")) => {
   return { score, verdict };
 };
 
-/* ---------- Gemini ---------- */
-const buildPrompt = ({ title, description, industry, budget, teamSize }, market) => `
-You are a startup analyst. Evaluate this startup idea for the ${market} market.
+/* ------------------------------ prompt ----------------------------- */
+const buildPrompt = ({ title, description, industry, budget, teamSize }, market, live) => `
+Evaluate this startup idea for the ${market} market.
+
 Title: ${title}
 Description: ${description}
 Industry: ${industry}
 Budget: ${budget}
 Team: ${teamSize}
-
+${live?.summary ? `
+LIVE MARKET DATA (collected ${new Date(live.collectedAt).toISOString()} from current web sources — treat this as current evidence, and mention specific findings in your marketResearch):
+${live.summary}
+` : ""}
+Give an independent prediction. Where live data is available, do not contradict it without a reason.
 Return ONLY valid JSON with exactly this shape (all metrics are integers 0-100, higher is better):
 {
   "metrics": { "marketDemand": 0, "competition": 0, "feasibility": 0, "financial": 0, "risk": 0 },
@@ -40,29 +50,7 @@ Return ONLY valid JSON with exactly this shape (all metrics are integers 0-100, 
 "competition" means 100 = very little competition. "risk" means 100 = very low risk.
 Keep every list to 3 short items. Be critical and differentiate: do not give every idea similar scores.`;
 
-const callGemini = async (idea, engine) => {
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(engine.model)}:generateContent`;
-  const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), 30000);
-  try {
-    const res = await fetch(url, {
-      method: "POST",
-      signal: ctrl.signal,
-      // key goes in a header, not the URL, so it never lands in proxy/access logs
-      headers: { "Content-Type": "application/json", "x-goog-api-key": process.env.GEMINI_API_KEY },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: buildPrompt(idea, engine.market) }] }],
-        generationConfig: { responseMimeType: "application/json", temperature: Number(engine.temperature) },
-      }),
-    });
-    if (!res.ok) throw new Error(`Gemini API error ${res.status}`);
-    const data = await res.json();
-    const text = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
-    return JSON.parse(text.replace(/^```json|```$/g, "").trim());
-  } finally { clearTimeout(timer); }
-};
-
-/* ---------- deterministic demo analysis ---------- */
+/* ---------- deterministic demo analysis (offline fallback) ---------- */
 const hash = (str) => { let h = 2166136261; for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 16777619); } return h >>> 0; };
 const rng = (seed) => () => { seed = (seed + 0x6d2b79f5) | 0; let t = Math.imul(seed ^ (seed >>> 15), 1 | seed); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
 
@@ -82,7 +70,7 @@ const demoReport = ({ title, description, industry, budget, teamSize }) => {
   const rnd = rng(hash(`${title}|${description}|${industry}`));
   const text = `${title} ${description}`.toLowerCase();
   const has = (re) => re.test(text);
-  const detail = Math.min(12, Math.floor(description.length / 60)); // richer description = better-defined idea
+  const detail = Math.min(12, Math.floor(description.length / 60));
   const monet = has(/subscription|commission|fee|pricing|revenue|saas|b2b|marketplace|premium|licen[sc]e/) ? 7 : -3;
   const tech = has(/\bai\b|machine learning|automation|platform|app|data|iot|analytics/) ? 4 : 0;
   const niche = has(/niche|specific|only|focused|regional|vernacular|tier[- ]?[23]/) ? 6 : 0;
@@ -116,54 +104,212 @@ const demoReport = ({ title, description, industry, budget, teamSize }) => {
   };
 };
 
-const list = (v, fallback) => (Array.isArray(v) && v.length ? v.slice(0, 5).map(String) : fallback);
+/* ------------------------------- helpers ---------------------------- */
+const list = (v, fallback, max = 5) => (Array.isArray(v) && v.length ? v.slice(0, max).map(String) : fallback);
 const str = (v, fallback) => (typeof v === "string" && v.trim() ? v : fallback);
 
+export const normalizeReport = (raw = {}, demo = {}) => {
+  const m = raw.metrics || {};
+  const metrics = Object.fromEntries(METRIC_KEYS.map((k) => [k, clamp(m[k] ?? demo.metrics?.[k])]));
+  const sw = raw.swot || {};
+  return {
+    metrics,
+    ...computeScore(metrics),
+    marketResearch: str(raw.marketResearch, demo.marketResearch || ""),
+    feasibilityNote: str(raw.feasibilityNote, demo.feasibilityNote || ""),
+    swot: {
+      strengths: list(sw.strengths, demo.swot?.strengths || []),
+      weaknesses: list(sw.weaknesses, demo.swot?.weaknesses || []),
+      opportunities: list(sw.opportunities, demo.swot?.opportunities || []),
+      threats: list(sw.threats, demo.swot?.threats || []),
+    },
+    targetCustomers: list(raw.targetCustomers, demo.targetCustomers || []),
+    competitors: list(raw.competitors, demo.competitors || []),
+    risks: list(raw.risks, demo.risks || []),
+    recommendations: list(raw.recommendations, demo.recommendations || []),
+  };
+};
+
+const unionList = (results, key, fallback, max = 5) => {
+  const seen = new Map();
+  for (const r of results) {
+    for (const item of (r.report?.[key] || []).slice(0, 5)) {
+      const k = String(item).trim().toLowerCase();
+      if (!k) continue;
+      const e = seen.get(k) || { text: String(item).trim(), n: 0, w: 0 };
+      e.n++; e.w += Number(r.weight) || 1; seen.set(k, e);
+    }
+  }
+  const out = [...seen.values()].sort((a, b) => b.n - a.n || b.w - a.w).slice(0, max).map((e) => e.text);
+  return out.length ? out : fallback;
+};
+
+const pickText = (results, key, fallback) => {
+  const sorted = [...results].sort((a, b) => (Number(b.weight) || 1) - (Number(a.weight) || 1));
+  for (const r of sorted) {
+    const v = r.report?.[key];
+    if (typeof v === "string" && v.trim().length > 20) return v;
+  }
+  return fallback;
+};
+
+/* --------- aggregate the council's independent predictions ---------- */
+export const aggregateReports = (results = [], engine = {}, demo = {}) => {
+  const valid = results.filter((r) => r?.report?.metrics);
+  if (!valid.length) return normalizeReport({}, demo);
+
+  const metric = (key) => {
+    let entries = valid.map((r) => ({ v: Number(r.report.metrics[key]) || 0, w: Number(r.weight) || 1 }));
+    if (entries.length >= 4) {
+      const sorted = [...entries].sort((a, b) => a.v - b.v);
+      entries = sorted.slice(1, -1); // trim outlier min/max when we have enough opinions
+    }
+    const totalW = entries.reduce((s, e) => s + e.w, 0) || 1;
+    return clamp(entries.reduce((s, e) => s + e.v * e.w, 0) / totalW);
+  };
+
+  const metrics = Object.fromEntries(METRIC_KEYS.map((k) => [k, metric(k)]));
+  const spreads = METRIC_KEYS.map((k) => {
+    const vals = valid.map((r) => Number(r.report.metrics[k]) || 0);
+    return Math.max(...vals) - Math.min(...vals);
+  });
+  const agreement = clamp(100 - (spreads.reduce((a, b) => a + b, 0) / spreads.length) * 1.2);
+  const configured = (engine.models || []).filter((m) => m.enabled).length || valid.length;
+  const coverage = Math.round((valid.length / configured) * 100);
+  const confidence = Math.round(agreement * 0.7 + Math.min(100, coverage) * 0.3);
+
+  return {
+    ...normalizeReport({}, demo),
+    metrics,
+    ...computeScore(metrics),
+    marketResearch: pickText(valid, "marketResearch", demo.marketResearch || ""),
+    feasibilityNote: pickText(valid, "feasibilityNote", demo.feasibilityNote || ""),
+    swot: {
+      strengths: unionList(valid, "strengths", demo.swot?.strengths || []),
+      weaknesses: unionList(valid, "weaknesses", demo.swot?.weaknesses || []),
+      opportunities: unionList(valid, "opportunities", demo.swot?.opportunities || []),
+      threats: unionList(valid, "threats", demo.swot?.threats || []),
+    },
+    targetCustomers: unionList(valid, "targetCustomers", demo.targetCustomers || []),
+    competitors: unionList(valid, "competitors", demo.competitors || []),
+    risks: unionList(valid, "risks", demo.risks || []),
+    recommendations: unionList(valid, "recommendations", demo.recommendations || []),
+    confidence,
+    consensus: { modelsUsed: valid.length, agreement, coverage },
+  };
+};
+
+/* ------------------------------ council ----------------------------- */
+const runCouncil = async (idea, engine, demo) => {
+  const models = (engine.models || []).filter((m) => m.enabled && m.model && keyForProvider(m.provider)).slice(0, 6);
+  if (models.length < 2) return null;
+
+  let live = null;
+  if (engine.liveData?.enabled) {
+    live = await collectLiveData(idea, engine);
+  }
+
+  const prompt = buildPrompt(idea, engine.market || "India", live);
+  const t0 = Date.now();
+  const settled = await Promise.allSettled(models.map(async (m) => {
+    const start = Date.now();
+    const raw = await callModel({
+      provider: m.provider, model: m.model, apiKey: keyForProvider(m.provider),
+      prompt, temperature: Number(engine.temperature) || 0, timeoutMs: 30000,
+    });
+    return { ...m, raw, ms: Date.now() - start };
+  }));
+
+  const oks = settled.filter((s) => s.status === "fulfilled").map((s) => s.value);
+  const failed = settled.filter((s) => s.status === "rejected");
+
+  if (!oks.length) {
+    recordAi({ ok: false, ms: Date.now() - t0, error: failed[0]?.reason?.message || "all models failed" });
+    syslog("warn", "council.failed", failed.map((f) => f.reason?.message || "error").join(" | "), idea.title || "");
+    return null;
+  }
+  recordAi({ ok: true, ms: Date.now() - t0 });
+
+  const entries = oks.map((m) => ({ ...m, report: normalizeReport(m.raw, demo) }));
+  const report = aggregateReports(entries, engine, demo);
+  return {
+    ...report,
+    source: "council",
+    generatedAt: new Date(),
+    models: entries.map((m) => ({
+      id: m.id, name: m.name, provider: m.provider, model: m.model,
+      weight: m.weight, ms: m.ms, score: m.report.score, verdict: m.report.verdict,
+      metrics: m.report.metrics,
+    })),
+    failedModels: failed.map((f, i) => ({ name: models[settled.indexOf(f)]?.name || `Model ${i + 1}`, error: f.reason?.message || "error" })),
+    liveData: live ? {
+      mode: live.mode, collectedAt: live.collectedAt, summary: live.summary,
+      queries: live.queries, errors: live.errors, sources: live.sources,
+    } : null,
+  };
+};
+
+/* ---------------------------- single model --------------------------- */
+const callSingle = async (idea, engine) => {
+  const raw = await callModel({
+    provider: engine.provider === "gemini" ? "gemini" : "gemini",
+    model: engine.model || "gemini-2.0-flash",
+    apiKey: process.env.GEMINI_API_KEY,
+    prompt: buildPrompt(idea, engine.market || "India", null),
+    temperature: Number(engine.temperature) || 0,
+  });
+  return raw;
+};
+
+/* ------------------------------- public ----------------------------- */
 export const analyzeIdea = async (idea) => {
   const engine = getConfig("engine");
   const features = getConfig("features");
   const demo = demoReport(idea);
-  let raw = demo;
-  let source = "demo";
 
-  if (process.env.GEMINI_API_KEY && engine.enabled && features.aiValidation && engine.provider === "gemini") {
-    const t0 = Date.now();
+  if (!engine.enabled || !features.aiValidation) {
+    return { ...normalizeReport(demo, demo), source: "demo", generatedAt: new Date() };
+  }
+
+  if ((engine.mode || "council") === "council") {
     try {
-      raw = await callGemini(idea, engine);
-      source = "gemini";
-      recordAi({ ok: true, ms: Date.now() - t0 });
-    } catch (err) {
-      recordAi({ ok: false, ms: Date.now() - t0, error: err.name === "AbortError" ? "timeout" : err.message });
-      syslog("warn", "ai.gemini_failed", err.message, idea.title);
-      if (!engine.fallbackToDemo) throw Object.assign(new Error("The AI engine is unavailable right now. Please try again shortly."), { status: 503 });
-      raw = demo;
+      const council = await runCouncil(idea, engine, demo);
+      if (council) return council;
+    } catch (e) {
+      syslog("warn", "council.error", e.message, idea.title || "");
+      recordAi({ ok: false, ms: 0, error: e.message });
     }
   }
 
-  const m = raw.metrics || {};
-  const metrics = Object.fromEntries(METRIC_KEYS.map((k) => [k, clamp(m[k] ?? demo.metrics[k])]));
-  const sw = raw.swot || {};
-  return {
-    source,
-    generatedAt: new Date(),
-    metrics,
-    ...computeScore(metrics),
-    marketResearch: str(raw.marketResearch, demo.marketResearch),
-    feasibilityNote: str(raw.feasibilityNote, demo.feasibilityNote),
-    swot: {
-      strengths: list(sw.strengths, demo.swot.strengths), weaknesses: list(sw.weaknesses, demo.swot.weaknesses),
-      opportunities: list(sw.opportunities, demo.swot.opportunities), threats: list(sw.threats, demo.swot.threats),
-    },
-    targetCustomers: list(raw.targetCustomers, demo.targetCustomers),
-    competitors: list(raw.competitors, demo.competitors),
-    risks: list(raw.risks, demo.risks),
-    recommendations: list(raw.recommendations, demo.recommendations),
-  };
+  if (process.env.GEMINI_API_KEY && (engine.mode || "council") === "single") {
+    const t0 = Date.now();
+    try {
+      const raw = await callSingle(idea, engine);
+      recordAi({ ok: true, ms: Date.now() - t0 });
+      return { ...normalizeReport(raw, demo), source: "gemini", generatedAt: new Date() };
+    } catch (err) {
+      recordAi({ ok: false, ms: Date.now() - t0, error: err.name === "AbortError" ? "timeout" : err.message });
+      syslog("warn", "ai.gemini_failed", err.message, idea.title || "");
+      if (!engine.fallbackToDemo) throw Object.assign(new Error("The AI engine is unavailable right now. Please try again shortly."), { status: 503 });
+    }
+  }
+
+  return { ...normalizeReport(demo, demo), source: "demo", generatedAt: new Date() };
 };
 
 // Used by Validation Engine "test run" - does not save anything
 export const testEngine = async () => {
   const t0 = Date.now();
   const r = await analyzeIdea({ title: "Test: AI crop advisory", description: "A WhatsApp-first assistant that helps smallholder farmers diagnose crop disease from photos and get mandi prices.", industry: "AgriTech", budget: "₹1–10 lakh", teamSize: "2–3 members" });
-  return { source: r.source, score: r.score, verdict: r.verdict, ms: Date.now() - t0, geminiKeyPresent: Boolean(process.env.GEMINI_API_KEY) };
+  return {
+    source: r.source, score: r.score, verdict: r.verdict, ms: Date.now() - t0,
+    geminiKeyPresent: Boolean(process.env.GEMINI_API_KEY),
+    openRouterKeyPresent: Boolean(process.env.OPENROUTER_API_KEY),
+    modelsUsed: r.models?.length || (r.source === "gemini" ? 1 : 0),
+    confidence: r.confidence ?? null,
+    liveSources: r.liveData?.sources?.length || 0,
+    liveMode: r.liveData?.mode || null,
+    failedModels: r.failedModels || [],
+    liveErrors: r.liveData?.errors || [],
+  };
 };

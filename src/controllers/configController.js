@@ -25,7 +25,13 @@ export const appConfig = async (req, res) => {
   res.json({ ...cfg, scoring: { thresholds: getConfig("scoring").thresholds, weights: getConfig("scoring").weights }, permissions: req.user.role === ROLES.SUPERADMIN ? PERMISSIONS.map((p) => p.key) : getConfig("permissions")[req.user.role] || [], aiEnabled: getConfig("engine").enabled });
 };
 
-export const adminConfig = (req, res) => res.json({ ...getAllConfig(), permissionList: PERMISSIONS, roles: Object.values(ROLES), geminiKeyPresent: Boolean(process.env.GEMINI_API_KEY) });
+export const adminConfig = (req, res) => res.json({
+  ...getAllConfig(), permissionList: PERMISSIONS, roles: Object.values(ROLES),
+  geminiKeyPresent: Boolean(process.env.GEMINI_API_KEY),
+  openRouterKeyPresent: Boolean(process.env.OPENROUTER_API_KEY),
+  tavilyKeyPresent: Boolean(process.env.TAVILY_API_KEY),
+  serperKeyPresent: Boolean(process.env.SERPER_API_KEY),
+});
 
 const num = (v, lo, hi, label) => { const n = Number(v); if (!Number.isFinite(n) || n < lo || n > hi) throw httpError(400, `${label} must be between ${lo} and ${hi}`); return n; };
 
@@ -44,7 +50,37 @@ const VALIDATORS = {
     if (improve >= go) throw httpError(400, "The GO threshold must be higher than the IMPROVE threshold");
     return { weights, thresholds: { go, improve } };
   },
-  engine: (v) => ({ provider: ["gemini", "demo"].includes(v.provider) ? v.provider : "gemini", enabled: Boolean(v.enabled), model: str(v.model, 60) || "gemini-2.0-flash", temperature: num(v.temperature, 0, 1, "Temperature"), fallbackToDemo: Boolean(v.fallbackToDemo), market: str(v.market, 40) || "India" }),
+  engine: (v) => {
+    const supplied = Array.isArray(v.models) ? v.models : DEFAULT_CONFIG.engine.models;
+    const models = supplied.slice(0, 6).map((m) => ({
+      id: str(m.id, 30) || Math.random().toString(36).slice(2, 8),
+      name: str(m.name, 60) || "Model",
+      provider: ["openrouter", "gemini"].includes(m.provider) ? m.provider : "openrouter",
+      model: str(m.model, 100),
+      weight: num(m.weight, 0, 5, "Model weight"),
+      enabled: Boolean(m.enabled),
+    })).filter((m) => m.model);
+    if (!models.length) throw httpError(400, "Add at least one model to the council");
+    const live = v.liveData || {};
+    return {
+      mode: ["council", "single", "demo"].includes(v.mode) ? v.mode : "council",
+      enabled: Boolean(v.enabled),
+      provider: ["gemini", "demo"].includes(v.provider) ? v.provider : "gemini",
+      model: str(v.model, 60) || "gemini-2.0-flash",
+      temperature: num(v.temperature, 0, 1, "Temperature"),
+      fallbackToDemo: Boolean(v.fallbackToDemo),
+      market: str(v.market, 40) || "India",
+      aggregation: ["weighted", "mean", "median"].includes(v.aggregation) ? v.aggregation : "weighted",
+      liveData: {
+        enabled: Boolean(live.enabled),
+        maxResults: num(live.maxResults ?? 8, 1, 20, "Max results"),
+        maxPages: num(live.maxPages ?? 3, 0, 8, "Max pages"),
+        timeoutMs: num(live.timeoutMs ?? 8000, 2000, 20000, "Fetch timeout"),
+        sources: (Array.isArray(live.sources) ? live.sources : ["search", "officialSites"]).filter((s) => ["search", "officialSites"].includes(s)),
+      },
+      models,
+    };
+  },
   categories: (v) => {
     if (!Array.isArray(v) || !v.length) throw httpError(400, "Provide at least one category");
     const seen = new Set();
