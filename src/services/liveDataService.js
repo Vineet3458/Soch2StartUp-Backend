@@ -8,21 +8,10 @@
 // still produced, it simply says which sources were available.
 import * as cheerio from "cheerio";
 import { syslog } from "./logger.js";
+import { isSafeUrl } from "../utils.js";
 
 const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0 Safari/537.36 Soch2Startup/2.0";
 const clean = (s) => String(s || "").replace(/\s+/g, " ").trim();
-
-const isSafeUrl = (value) => {
-  try {
-    const u = new URL(value);
-    if (!["http:", "https:"].includes(u.protocol)) return false;
-    const h = u.hostname.toLowerCase();
-    if (h === "localhost" || h === "::1" || h.endsWith(".localhost")) return false;
-    if (/^127\./.test(h) || /^10\./.test(h) || /^192\.168\./.test(h) || /^169\.254\./.test(h)) return false;
-    if (/^172\.(1[6-9]|2\d|3[01])\./.test(h)) return false;
-    return true;
-  } catch { return false; }
-};
 
 const fetchWithTimeout = async (url, options = {}, ms = 8000) => {
   const ctrl = new AbortController();

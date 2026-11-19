@@ -25,10 +25,12 @@ export const createSession = async (req, res) => {
   if (isNaN(when)) throw httpError(400, "Please choose a valid date and time");
   if (when < new Date(Date.now() - 60000)) throw httpError(400, "Choose a time in the future");
   const mentorId = admin && req.body.mentor ? needId(req.body.mentor, "mentor id") : req.user._id;
+  const link = str(req.body.link, 300);
+  if (link && !/^https?:\/\//i.test(link)) throw httpError(400, "Meeting link must start with http:// or https://");
   const s = await Session.create({
     idea: idea._id, mentor: mentorId, founder: idea.user, title: str(req.body.title, 120) || `Mentoring: ${idea.title}`,
     agenda: str(req.body.agenda, 1000), mode: ["video", "call", "in_person"].includes(req.body.mode) ? req.body.mode : "video",
-    link: str(req.body.link, 300), scheduledAt: when, durationMin: Number(req.body.durationMin) || 45,
+    link, scheduledAt: when, durationMin: Number(req.body.durationMin) || 45,
   });
   audit(req.user, "session.scheduled", idea.title, when.toISOString());
   notify(idea.user, { type: "session", title: "Mentoring session scheduled", message: `${req.user.name} · ${when.toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" })}`, link: `/app/ideas/${idea._id}` });
@@ -45,7 +47,11 @@ export const updateSession = async (req, res) => {
   if (b.notes !== undefined) s.notes = str(b.notes, 2000);
   if (b.title) s.title = str(b.title, 120);
   if (b.agenda !== undefined) s.agenda = str(b.agenda, 1000);
-  if (b.link !== undefined) s.link = str(b.link, 300);
+  if (b.link !== undefined) {
+    const linkStr = str(b.link, 300);
+    if (linkStr && !/^https?:\/\//i.test(linkStr)) throw httpError(400, "Meeting link must start with http:// or https://");
+    s.link = linkStr;
+  }
   if (b.scheduledAt) { const d = new Date(b.scheduledAt); if (!isNaN(d)) s.scheduledAt = d; }
   await s.save();
   if (b.status === "cancelled") notify(s.founder, { type: "warning", title: "Session cancelled", message: `"${s.title}" was cancelled by your mentor.`, link: `/app/ideas/${s.idea._id}` });

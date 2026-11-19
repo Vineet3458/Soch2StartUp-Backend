@@ -7,7 +7,7 @@ import { hasPermission } from "../services/configService.js";
 import { audit } from "../services/logger.js";
 import { notify } from "../services/notify.js";
 import { emit } from "../services/realtime.js";
-import { httpError, str, needId } from "../utils.js";
+import { httpError, str, needId, sanitizeQuery } from "../utils.js";
 
 export const createReport = async (req, res) => {
   const { targetType } = req.body;
@@ -30,7 +30,8 @@ export const createReport = async (req, res) => {
 };
 
 export const listReports = async (req, res) => {
-  const { targetType, status } = req.query;
+  const targetType = sanitizeQuery(req.query.targetType);
+  const status = sanitizeQuery(req.query.status);
   const filter = {};
   if (targetType) filter.targetType = targetType;
   if (status) filter.status = status;

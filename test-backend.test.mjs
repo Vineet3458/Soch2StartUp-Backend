@@ -39,9 +39,9 @@ test("auth: login, bad password, NoSQL-injection object, blocked user", async ()
 });
 
 test("auth: self-registration can never grant admin roles; mentors start unverified", async () => {
-  const a = await call("POST", "/api/auth/register", { body: { name: "Evil", email: "evil@x.com", password: "secret1", role: "superadmin" } });
+  const a = await call("POST", "/api/auth/register", { body: { name: "Evil", email: "evil@x.com", password: "Secret12", role: "superadmin" } });
   assert.equal(a.status, 201); assert.equal(a.data.user.role, "entrepreneur");
-  const m = await call("POST", "/api/auth/register", { body: { name: "New Mentor", email: "nm@x.com", password: "secret1", role: "mentor" } });
+  const m = await call("POST", "/api/auth/register", { body: { name: "New Mentor", email: "nm@x.com", password: "Secret12", role: "mentor" } });
   assert.equal(m.data.user.verified, false);
   const fb = await call("POST", `/api/ideas/${(await call("GET", "/api/ideas", { token: tok.admin })).data[0]._id}/feedback`, { token: m.data.token, body: { comment: "hi" } });
   assert.equal(fb.status, 403); // unverified mentor cannot write feedback
@@ -217,4 +217,162 @@ test("realtime: SSE stream delivers change events when data changes", async () =
   ctrl.abort();
   assert.match(out, /event: change/);
   assert.equal((await fetch(`${base}/api/events?token=bad`)).status, 401);
+});
+
+test("security: password strength rules and bcrypt DoS defense", async () => {
+  // Too short (< 8 chars)
+  assert.equal((await call("POST", "/api/auth/register", { body: { name: "Weak", email: "weak1@x.com", password: "short1" } })).status, 400);
+  // No numbers
+  assert.equal((await call("POST", "/api/auth/register", { body: { name: "Weak", email: "weak2@x.com", password: "allcharactershere" } })).status, 400);
+  // No letters
+  assert.equal((await call("POST", "/api/auth/register", { body: { name: "Weak", email: "weak3@x.com", password: "1234567890" } })).status, 400);
+  // Bcrypt DoS defense (> 128 chars)
+  assert.equal((await call("POST", "/api/auth/register", { body: { name: "Weak", email: "weak4@x.com", password: "A".repeat(129) + "1" } })).status, 400);
+});
+
+test("security: stored XSS defense in session links", async () => {
+  const ideaId = (await call("GET", "/api/ideas", { token: tok.admin })).data[0]._id;
+  // XSS via javascript: URI
+  const bad1 = await call("POST", "/api/sessions", {
+    token: tok.admin,
+    body: { idea: ideaId, scheduledAt: new Date(Date.now() + 86400000).toISOString(), link: "javascript:alert(1)" }
+  });
+  assert.equal(bad1.status, 400);
+  assert.match(bad1.data.message, /http:\/\/ or https:\/\//i);
+
+  // XSS via data: URI
+  const bad2 = await call("POST", "/api/sessions", {
+    token: tok.admin,
+    body: { idea: ideaId, scheduledAt: new Date(Date.now() + 86400000).toISOString(), link: "data:text/html,<script>alert(1)</script>" }
+  });
+  assert.equal(bad2.status, 400);
+});
+
+test("security: NoSQL query selector injection sanitized across controllers", async () => {
+  // Query parameters with operator keys should be sanitized and not cause internal server errors
+  assert.equal((await call("GET", "/api/assignments?kind[$gt]=", { token: tok.admin })).status, 200);
+  assert.equal((await call("GET", "/api/ideas?status[$ne]=draft", { token: tok.admin })).status, 200);
+  assert.equal((await call("GET", "/api/reports?targetType[$gt]=", { token: tok.mod })).status, 200);
+  assert.equal((await call("GET", "/api/resources?kind[$gt]=", { token: tok.admin })).status, 200);
+});
+
+test("security: SSRF protection in isSafeUrl", async () => {
+  const { isSafeUrl } = await import("./src/utils.js");
+  // Loopback & local
+  assert.equal(isSafeUrl("http://localhost:5000"), false);
+  assert.equal(isSafeUrl("http://sub.localhost"), false);
+  assert.equal(isSafeUrl("http://127.0.0.1"), false);
+  assert.equal(isSafeUrl("http://127.0.0.2"), false);
+  assert.equal(isSafeUrl("http://0.0.0.0"), false);
+  assert.equal(isSafeUrl("http://0.0.0.1"), false);
+  assert.equal(isSafeUrl("http://0.42.0.1"), false);
+  // Private subnets
+  assert.equal(isSafeUrl("http://10.0.0.1"), false);
+  assert.equal(isSafeUrl("http://172.16.0.1"), false);
+  assert.equal(isSafeUrl("http://172.31.255.255"), false);
+  assert.equal(isSafeUrl("http://192.168.1.1"), false);
+  // Cloud metadata
+  assert.equal(isSafeUrl("http://169.254.169.254"), false);
+  // IPv6 loopback & ULA
+  assert.equal(isSafeUrl("http://[::1]"), false);
+  assert.equal(isSafeUrl("http://[::]"), false);
+  assert.equal(isSafeUrl("http://[fd00::1]"), false);
+  assert.equal(isSafeUrl("http://[fc00::1]"), false);
+  assert.equal(isSafeUrl("http://[fe80::1]"), false);
+  // IPv4-mapped IPv6
+  assert.equal(isSafeUrl("http://[::ffff:127.0.0.1]"), false);
+  assert.equal(isSafeUrl("http://[::ffff:169.254.169.254]"), false);
+  assert.equal(isSafeUrl("http://[::ffff:10.0.0.1]"), false);
+  // Legitimate public URLs
+  assert.equal(isSafeUrl("https://example.com/webhook"), true);
+  assert.equal(isSafeUrl("http://example.org:8080/events"), true);
+});
+
+test("security: sensitive query parameters redacted from logs and errors", async () => {
+  const { redactUrl } = await import("./src/middleware/errorMiddleware.js");
+  const cleaned = redactUrl("/api/unknown?token=secret123&password=pass&key=apikey&safe=ok");
+  assert.match(cleaned, /token=\[REDACTED\]/);
+  assert.match(cleaned, /password=\[REDACTED\]/);
+  assert.match(cleaned, /key=\[REDACTED\]/);
+  assert.match(cleaned, /safe=ok/);
+});
+
+test("security: JWT invalidation on password change", async () => {
+  const reg = await call("POST", "/api/auth/register", {
+    body: { name: "JWT Test", email: "jwttest@x.com", password: "OriginalPass1" }
+  });
+  assert.equal(reg.status, 201);
+  const oldToken = reg.data.token;
+
+  // Verify old token works initially
+  assert.equal((await call("GET", "/api/auth/me", { token: oldToken })).status, 200);
+
+  await new Promise((r) => setTimeout(r, 50));
+
+  // Update password
+  const changeRes = await call("PATCH", "/api/auth/password", {
+    token: oldToken,
+    body: { currentPassword: "OriginalPass1", newPassword: "UpdatedPass2" }
+  });
+  assert.equal(changeRes.status, 200);
+
+  // Old token MUST now be rejected
+  assert.equal((await call("GET", "/api/auth/me", { token: oldToken })).status, 401);
+
+  // Wait 1s so new token's whole-second iat >= passwordChangedAt
+  await new Promise((r) => setTimeout(r, 1000));
+
+  // Login with new password succeeds and new token works
+  const newLogin = await call("POST", "/api/auth/login", {
+    body: { email: "jwttest@x.com", password: "UpdatedPass2" }
+  });
+  assert.equal(newLogin.status, 200);
+  assert.equal((await call("GET", "/api/auth/me", { token: newLogin.data.token })).status, 200);
+});
+
+test("security: DPDP Act 2023 self-service account deletion", async () => {
+  const reg = await call("POST", "/api/auth/register", {
+    body: { name: "Delete Test", email: "deleteme@x.com", password: "DeletePass1" }
+  });
+  assert.equal(reg.status, 201);
+  const token = reg.data.token;
+
+  // Superadmin cannot self-delete
+  const superDel = await call("DELETE", "/api/auth/me", { token: tok.super });
+  assert.equal(superDel.status, 403);
+
+  // Self deletion works for regular users
+  const delRes = await call("DELETE", "/api/auth/me", { token });
+  assert.equal(delRes.status, 200);
+
+  // Subsequent login fails
+  assert.equal((await call("POST", "/api/auth/login", { body: { email: "deleteme@x.com", password: "DeletePass1" } })).status, 401);
+});
+
+test("security: email verification token validation and no backdoor", async () => {
+  const reg = await call("POST", "/api/auth/register", {
+    body: { name: "Email Verify Test", email: "verifytest@x.com", password: "VerifyPass1" }
+  });
+  assert.equal(reg.status, 201);
+  const token = reg.data.token;
+
+  // Backdoor "123456" must be rejected
+  const backdoor = await call("POST", "/api/auth/verify-email", {
+    token,
+    body: { email: "verifytest@x.com", token: "123456" }
+  });
+  assert.equal(backdoor.status, 400);
+
+  // Request real verification code
+  const sendRes = await call("POST", "/api/auth/send-verification", { token });
+  assert.equal(sendRes.status, 200);
+});
+
+test("security: security headers (CSP, HSTS, Permissions-Policy, Referrer-Policy)", async () => {
+  const res = await fetch(`${base}/api/health`);
+  assert.equal(res.status, 200);
+  assert.ok(res.headers.get("content-security-policy"), "Missing CSP header");
+  assert.ok(res.headers.get("permissions-policy"), "Missing Permissions-Policy header");
+  assert.equal(res.headers.get("referrer-policy"), "strict-origin-when-cross-origin");
+  assert.equal(res.headers.get("x-content-type-options"), "nosniff");
 });

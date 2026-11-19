@@ -2,6 +2,19 @@
 // Events carry only { topic, action, id } - never private data - so broadcasting is safe.
 const clients = new Set(); // { res, userId, role, isPublic }
 
+export const canConnect = (user) => {
+  if (clients.size >= 2000) return false;
+  if (user) {
+    let count = 0;
+    const uid = String(user._id);
+    for (const c of clients) {
+      if (c.userId === uid) count++;
+    }
+    if (count >= 10) return false;
+  }
+  return true;
+};
+
 export const addClient = (res, user) => {
   const client = { res, userId: user ? String(user._id) : null, role: user?.role || null, isPublic: !user };
   clients.add(client);

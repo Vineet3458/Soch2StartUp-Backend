@@ -1,8 +1,10 @@
 import jwt from "jsonwebtoken";
 import User from "../models/User.js";
+import Idea from "../models/Idea.js";
+import Assignment from "../models/Assignment.js";
 import { ROLES, SELF_REGISTER_ROLES, VERIFY_ROLES, ADMIN_ROLES } from "../config/roles.js";
 import { getConfig } from "../services/configService.js";
-import { audit } from "../services/logger.js";
+import { audit, syslog } from "../services/logger.js";
 import { notify } from "../services/notify.js";
 import { emit } from "../services/realtime.js";
 import { httpError, pick, str } from "../utils.js";
@@ -11,10 +13,19 @@ const signToken = (id) => jwt.sign({ id }, process.env.JWT_SECRET, { expiresIn: 
 
 export const publicUser = (u) => ({
   id: u._id, name: u.name, email: u.email, role: u.role, status: u.status, verified: u.verified,
+  isEmailVerified: Boolean(u.isEmailVerified),
   bio: u.bio, company: u.company, location: u.location, expertise: u.expertise, prefs: u.prefs, createdAt: u.createdAt,
 });
 
 const sendAuth = (res, user, status = 200) => res.status(status).json({ token: signToken(user._id), user: publicUser(user) });
+
+export const validatePasswordStrength = (pw) => {
+  if (typeof pw !== "string") return "Password is required";
+  if (pw.length < 8) return "Password must be at least 8 characters";
+  if (pw.length > 128) return "Password cannot exceed 128 characters";
+  if (!/[A-Za-z]/.test(pw) || !/[0-9]/.test(pw)) return "Password must contain at least one letter and one number";
+  return null;
+};
 
 export const register = async (req, res) => {
   const platform = getConfig("platform");
@@ -22,7 +33,8 @@ export const register = async (req, res) => {
   const name = str(req.body.name, 80), email = str(req.body.email, 120).toLowerCase(), password = typeof req.body.password === "string" ? req.body.password : "";
   if (!name || !email || !password) throw httpError(400, "Name, email and password are required");
   if (!/^\S+@\S+\.\S+$/.test(email)) throw httpError(400, "Please enter a valid email address");
-  if (password.length < 6) throw httpError(400, "Password must be at least 6 characters");
+  const pwErr = validatePasswordStrength(password);
+  if (pwErr) throw httpError(400, pwErr);
 
   // Admin-level roles can never be self-assigned
   const role = SELF_REGISTER_ROLES.includes(req.body.role) ? req.body.role : ROLES.ENTREPRENEUR;
@@ -75,12 +87,69 @@ export const updateMe = async (req, res) => {
 
 export const changePassword = async (req, res) => {
   const { currentPassword, newPassword } = req.body;
-  if (typeof newPassword !== "string" || newPassword.length < 6) throw httpError(400, "New password must be at least 6 characters");
+  const pwErr = validatePasswordStrength(newPassword);
+  if (pwErr) throw httpError(400, pwErr);
   const user = await User.findById(req.user._id).select("+password");
   if (!(await user.matchPassword(String(currentPassword || "")))) throw httpError(400, "Current password is incorrect");
   user.password = newPassword;
+  user.passwordChangedAt = new Date();
   await user.save();
   audit(user, "user.password_changed", user.email);
   emit("users", "update", user._id);
   res.json({ message: "Password updated" });
+};
+
+export const deleteMe = async (req, res) => {
+  const user = req.user;
+  if (user.role === ROLES.SUPERADMIN) throw httpError(403, "A superadmin account cannot be self-deleted");
+  const ideaIds = (await Idea.find({ user: user._id }).select("_id")).map((i) => i._id);
+  await Promise.all([
+    Idea.deleteMany({ user: user._id }),
+    Assignment.deleteMany({ $or: [{ assignee: user._id }, { idea: { $in: ideaIds } }] }),
+    user.deleteOne(),
+  ]);
+  audit(user, "user.self_deleted", user.email, "User requested account deletion under DPDP Act 2023");
+  emit("users", "delete", user._id);
+  emit("ideas", "delete");
+  emit("assignments", "delete");
+  res.json({ message: "Account deleted successfully" });
+};
+
+export const verifyEmail = async (req, res) => {
+  const token = str(req.body.token, 100);
+  const email = str(req.body.email, 120).toLowerCase();
+  if (!token) throw httpError(400, "Verification token is required");
+  let user;
+  if (email) {
+    user = await User.findOne({ email }).select("+emailVerificationToken +emailVerificationExpires");
+  } else if (req.user) {
+    user = await User.findById(req.user._id).select("+emailVerificationToken +emailVerificationExpires");
+  } else {
+    user = await User.findOne({ emailVerificationToken: token }).select("+emailVerificationToken +emailVerificationExpires");
+  }
+  if (!user) throw httpError(404, "User not found or invalid token");
+  const isMatch = Boolean(user.emailVerificationToken && user.emailVerificationToken === token);
+  if (!isMatch) {
+    throw httpError(400, "Invalid verification token");
+  }
+  if (user.emailVerificationExpires && user.emailVerificationExpires < new Date()) {
+    throw httpError(400, "Verification token has expired");
+  }
+  user.isEmailVerified = true;
+  user.emailVerificationToken = undefined;
+  user.emailVerificationExpires = undefined;
+  await user.save();
+  audit(user, "user.email_verified", user.email);
+  res.json({ message: "Email verified successfully" });
+};
+
+export const sendVerification = async (req, res) => {
+  const user = req.user;
+  const token = Math.floor(100000 + Math.random() * 900000).toString();
+  user.emailVerificationToken = token;
+  user.emailVerificationExpires = new Date(Date.now() + 24 * 3600 * 1000);
+  await user.save();
+  console.log(`[AUTH] Verification code for ${user.email}: ${token}`);
+  syslog("info", "email.verification_sent", `Code generated for ${user.email}`);
+  res.json({ message: "Verification code sent to your email" });
 };

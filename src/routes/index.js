@@ -1,7 +1,7 @@
 import { Router } from "express";
 import rateLimit from "express-rate-limit";
 import { protect, authorize, perm, feature, userFromToken } from "../middleware/authMiddleware.js";
-import { addClient } from "../services/realtime.js";
+import { addClient, canConnect } from "../services/realtime.js";
 import { ROLES } from "../config/roles.js";
 import * as auth from "../controllers/authController.js";
 import * as users from "../controllers/userController.js";
@@ -19,6 +19,15 @@ import * as system from "../controllers/systemController.js";
 
 const r = Router();
 const authLimiter = rateLimit({ windowMs: 15 * 60 * 1000, limit: 30, standardHeaders: "draft-7", legacyHeaders: false, message: { message: "Too many attempts. Please try again in a few minutes." } });
+const aiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 30,
+  standardHeaders: "draft-7",
+  legacyHeaders: false,
+  keyGenerator: (req) => (req.user ? String(req.user._id) : req.ip),
+  validate: { keyGeneratorIpFallback: false },
+  message: { message: "AI analysis rate limit reached. Please wait a few minutes before analyzing another idea." },
+});
 
 r.get("/health", (req, res) => res.json({ status: "ok", time: new Date().toISOString() }));
 
@@ -29,6 +38,7 @@ r.get("/events", async (req, res) => {
     try { user = await userFromToken(String(req.query.token)); } catch { /* handled below */ }
     if (!user) return res.status(401).json({ message: "Invalid or expired token" });
   }
+  if (!canConnect(user)) return res.status(429).json({ message: "Too many concurrent realtime connections" });
   res.set({ "Content-Type": "text/event-stream", "Cache-Control": "no-cache, no-transform", Connection: "keep-alive", "X-Accel-Buffering": "no" });
   res.flushHeaders();
   res.write(`retry: 3000\nevent: ready\ndata: ${JSON.stringify({ user: Boolean(user) })}\n\n`);
@@ -40,12 +50,15 @@ r.get("/events", async (req, res) => {
 r.get("/config/public", config.publicConfig);
 r.post("/auth/register", authLimiter, auth.register);
 r.post("/auth/login", authLimiter, auth.login);
+r.post("/auth/verify-email", authLimiter, auth.verifyEmail);
 
 /* Everything below needs a valid token */
 r.use(protect);
 r.get("/auth/me", auth.getMe);
 r.patch("/auth/me", auth.updateMe);
+r.delete("/auth/me", auth.deleteMe);
 r.patch("/auth/password", authLimiter, auth.changePassword);
+r.post("/auth/send-verification", authLimiter, auth.sendVerification);
 
 r.get("/config/app", config.appConfig);
 r.get("/notifications", notifications.listNotifications);
@@ -59,10 +72,10 @@ r.get("/stats/badges", stats.badges);
 r.get("/stats/admin", perm("analytics.view"), stats.adminStats);
 
 /* Ideas */
-r.route("/ideas").get(ideas.listIdeas).post(ideas.createIdea);
+r.route("/ideas").get(ideas.listIdeas).post(aiLimiter, ideas.createIdea);
 r.get("/ideas/compare", feature("compareIdeas"), ideas.compareIdeas); // keep above /:id
 r.route("/ideas/:id").get(ideas.getIdea).patch(ideas.updateIdea).delete(ideas.deleteIdea);
-r.post("/ideas/:id/reanalyze", ideas.reanalyze);
+r.post("/ideas/:id/reanalyze", aiLimiter, ideas.reanalyze);
 r.put("/ideas/:id/plan", ideas.updatePlan);
 r.put("/ideas/:id/roadmap", ideas.updateRoadmap);
 r.post("/ideas/:id/review", perm("ideas.review"), ideas.reviewIdea);

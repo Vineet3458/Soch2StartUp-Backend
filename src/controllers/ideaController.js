@@ -12,7 +12,7 @@ import { audit } from "../services/logger.js";
 import { notify } from "../services/notify.js";
 import { emit } from "../services/realtime.js";
 import { fireWebhook } from "../services/webhook.js";
-import { httpError, escapeRegex, str, needId } from "../utils.js";
+import { httpError, escapeRegex, str, needId, sanitizeQuery } from "../utils.js";
 
 const isOwner = (idea, user) => String(idea.user?._id || idea.user) === String(user._id);
 const canSee = (idea, user) => isOwner(idea, user) || (STAFF_ROLES.includes(user.role) && idea.status !== "draft");
@@ -80,8 +80,10 @@ export const listIdeas = async (req, res) => {
     const a = await Assignment.find({ assignee: req.user._id }).select("idea");
     filter._id = { $in: a.map((x) => x.idea) };
   }
-  if (status) filter.status = status;
-  if (industry) filter.industry = industry;
+  const cleanStatus = sanitizeQuery(status);
+  const cleanIndustry = sanitizeQuery(industry);
+  if (cleanStatus) filter.status = cleanStatus;
+  if (cleanIndustry) filter.industry = cleanIndustry;
   if (q) { const rx = new RegExp(escapeRegex(q), "i"); filter.$and = [{ $or: [{ title: rx }, { description: rx }] }]; }
   const ideas = await Idea.find(filter).populate("user", "name email role").sort("-createdAt").limit(500);
   res.json(await decorate(ideas));
