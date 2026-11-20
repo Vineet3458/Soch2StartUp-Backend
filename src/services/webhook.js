@@ -1,10 +1,11 @@
 import { getConfig } from "./configService.js";
 import { syslog } from "./logger.js";
+import { isSafeUrl } from "../utils.js";
 
 // Fire-and-forget outgoing webhook (configured by the superadmin under Integrations)
 export const fireWebhook = async (event, payload) => {
   const cfg = getConfig("integrations")?.webhook;
-  if (!cfg?.enabled || !cfg.url || !(cfg.events || []).includes(event)) return;
+  if (!cfg?.enabled || !cfg.url || !isSafeUrl(cfg.url) || !(cfg.events || []).includes(event)) return;
   try {
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), 5000);
@@ -21,6 +22,9 @@ export const fireWebhook = async (event, payload) => {
 };
 
 export const testWebhook = async (url) => {
+  if (!isSafeUrl(url)) {
+    return { ok: false, status: 400, ms: 0, error: "Invalid or restricted webhook URL" };
+  }
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), 5000);
   const t0 = Date.now();

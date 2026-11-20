@@ -4,9 +4,12 @@ import { VERIFY_ROLES } from "../config/roles.js";
 import { hasPermission, getConfig } from "../services/configService.js";
 
 export const userFromToken = async (token) => {
-  const { id } = jwt.verify(token, process.env.JWT_SECRET);
-  const user = await User.findById(id);
+  const decoded = jwt.verify(token, process.env.JWT_SECRET, { algorithms: ["HS256"] });
+  const user = await User.findById(decoded.id);
   if (!user || !user.isActive) return null;
+  if (user.passwordChangedAt && decoded.iat) {
+    if (decoded.iat * 1000 < user.passwordChangedAt.getTime()) return null;
+  }
   return user;
 };
 

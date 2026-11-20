@@ -5,7 +5,7 @@ import { hasPermission } from "../services/configService.js";
 import { audit } from "../services/logger.js";
 import { notify } from "../services/notify.js";
 import { emit } from "../services/realtime.js";
-import { httpError, escapeRegex, str, needId } from "../utils.js";
+import { httpError, escapeRegex, str, needId, sanitizeQuery } from "../utils.js";
 
 const KINDS = ["guideline", "template", "playbook", "announcement", "article"];
 
@@ -14,7 +14,8 @@ export const listResources = async (req, res) => {
   const filter = {};
   const manager = hasPermission(req.user.role, "resources.manage");
   if (!manager) filter.$or = [{ audience: { $size: 0 } }, { audience: req.user.role }];
-  if (kind) filter.kind = kind;
+  const cleanKind = sanitizeQuery(kind);
+  if (cleanKind) filter.kind = cleanKind;
   if (saved === "true") filter.savedBy = req.user._id;
   if (q) { const rx = new RegExp(escapeRegex(q), "i"); filter.$and = [{ $or: [{ title: rx }, { summary: rx }, { body: rx }] }]; }
   const rows = await Resource.find(filter).sort("-pinned -createdAt").limit(300);

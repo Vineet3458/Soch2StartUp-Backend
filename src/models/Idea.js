@@ -17,7 +17,7 @@ const reportSchema = new mongoose.Schema(
     liveData: {
       mode: String, collectedAt: Date, summary: String,
       queries: [String], errors: [String],
-      sources: [{ title: String, url: String, domain: String, snippet: String, kind: String, siteText: String }],
+      sources: [{ title: String, url: String, domain: String, snippet: String, kind: String, siteTitle: String, siteText: String }],
     },
     metrics: {
       marketDemand: Number,

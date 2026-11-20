@@ -7,7 +7,7 @@ import { testWebhook } from "../services/webhook.js";
 import { audit } from "../services/logger.js";
 import { emit } from "../services/realtime.js";
 import { publicStats } from "./statsController.js";
-import { httpError, str } from "../utils.js";
+import { httpError, str, isSafeUrl } from "../utils.js";
 
 const pickKeys = (keys) => Object.fromEntries(keys.map((k) => [k, getConfig(k)]));
 
@@ -96,7 +96,7 @@ const VALIDATORS = {
   },
   integrations: (v) => {
     const url = str(v.webhook?.url, 300);
-    if (url && !/^https?:\/\//i.test(url)) throw httpError(400, "Webhook URL must start with http:// or https://");
+    if (url && (!/^https?:\/\//i.test(url) || !isSafeUrl(url))) throw httpError(400, "Webhook URL must start with http:// or https:// and cannot point to internal/private addresses");
     return { webhook: { enabled: Boolean(v.webhook?.enabled) && Boolean(url), url, events: [].concat(v.webhook?.events || []).filter((e) => ["idea.created", "idea.reviewed"].includes(e)) } };
   },
 };
@@ -136,5 +136,6 @@ export const engineTest = async (req, res) => res.json(await testEngine());
 export const webhookTest = async (req, res) => {
   const url = str(req.body.url, 300);
   if (!/^https?:\/\//i.test(url)) throw httpError(400, "Enter a valid http(s) URL first");
+  if (!isSafeUrl(url)) throw httpError(400, "Webhook URL cannot point to internal/private addresses");
   res.json(await testWebhook(url));
 };

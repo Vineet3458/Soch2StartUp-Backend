@@ -133,7 +133,8 @@ export const normalizeReport = (raw = {}, demo = {}) => {
 const unionList = (results, key, fallback, max = 5) => {
   const seen = new Map();
   for (const r of results) {
-    for (const item of (r.report?.[key] || []).slice(0, 5)) {
+    const values = key.startsWith("swot.") ? (r.report?.swot?.[key.slice(5)] || []) : (r.report?.[key] || []);
+    for (const item of values.slice(0, 5)) {
       const k = String(item).trim().toLowerCase();
       if (!k) continue;
       const e = seen.get(k) || { text: String(item).trim(), n: 0, w: 0 };
@@ -160,12 +161,19 @@ export const aggregateReports = (results = [], engine = {}, demo = {}) => {
 
   const metric = (key) => {
     let entries = valid.map((r) => ({ v: Number(r.report.metrics[key]) || 0, w: Number(r.weight) || 1 }));
+    if (engine.aggregation === "median") {
+      const vals = entries.map((e) => e.v).sort((a, b) => a - b);
+      const mid = Math.floor(vals.length / 2);
+      return clamp(vals.length % 2 ? vals[mid] : (vals[mid - 1] + vals[mid]) / 2);
+    }
     if (entries.length >= 4) {
       const sorted = [...entries].sort((a, b) => a.v - b.v);
       entries = sorted.slice(1, -1); // trim outlier min/max when we have enough opinions
     }
-    const totalW = entries.reduce((s, e) => s + e.w, 0) || 1;
-    return clamp(entries.reduce((s, e) => s + e.v * e.w, 0) / totalW);
+    const useWeights = engine.aggregation !== "mean";
+    const w = (e) => (useWeights ? e.w : 1);
+    const totalW = entries.reduce((s, e) => s + w(e), 0) || 1;
+    return clamp(entries.reduce((s, e) => s + e.v * w(e), 0) / totalW);
   };
 
   const metrics = Object.fromEntries(METRIC_KEYS.map((k) => [k, metric(k)]));
@@ -185,10 +193,10 @@ export const aggregateReports = (results = [], engine = {}, demo = {}) => {
     marketResearch: pickText(valid, "marketResearch", demo.marketResearch || ""),
     feasibilityNote: pickText(valid, "feasibilityNote", demo.feasibilityNote || ""),
     swot: {
-      strengths: unionList(valid, "strengths", demo.swot?.strengths || []),
-      weaknesses: unionList(valid, "weaknesses", demo.swot?.weaknesses || []),
-      opportunities: unionList(valid, "opportunities", demo.swot?.opportunities || []),
-      threats: unionList(valid, "threats", demo.swot?.threats || []),
+      strengths: unionList(valid, "swot.strengths", demo.swot?.strengths || []),
+      weaknesses: unionList(valid, "swot.weaknesses", demo.swot?.weaknesses || []),
+      opportunities: unionList(valid, "swot.opportunities", demo.swot?.opportunities || []),
+      threats: unionList(valid, "swot.threats", demo.swot?.threats || []),
     },
     targetCustomers: unionList(valid, "targetCustomers", demo.targetCustomers || []),
     competitors: unionList(valid, "competitors", demo.competitors || []),

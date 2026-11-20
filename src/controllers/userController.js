@@ -1,12 +1,13 @@
 import User from "../models/User.js";
 import Idea from "../models/Idea.js";
 import Assignment from "../models/Assignment.js";
-import { ROLES, ADMIN_ROLES, VERIFY_ROLES } from "../config/roles.js";
-import { hasPermission } from "../services/configService.js";
+import { ROLES, ADMIN_ROLES } from "../config/roles.js";
 import { audit } from "../services/logger.js";
 import { notify } from "../services/notify.js";
 import { emit } from "../services/realtime.js";
 import { httpError, escapeRegex, str, needId } from "../utils.js";
+import { validatePasswordStrength, deleteMe } from "./authController.js";
+export { deleteMe };
 
 // Admins may not touch admin/superadmin accounts - only a superadmin can
 const guardTarget = (actor, target) => {
@@ -42,7 +43,9 @@ export const directory = async (req, res) => {
 export const createUser = async (req, res) => {
   const name = str(req.body.name, 80), email = str(req.body.email, 120).toLowerCase(), password = String(req.body.password || "");
   const role = Object.values(ROLES).includes(req.body.role) ? req.body.role : ROLES.ENTREPRENEUR;
-  if (!name || !email || password.length < 6) throw httpError(400, "Name, valid email and a password of 6+ characters are required");
+  if (!name || !email) throw httpError(400, "Name and valid email are required");
+  const pwErr = validatePasswordStrength(password);
+  if (pwErr) throw httpError(400, pwErr);
   if (ADMIN_ROLES.includes(role) && req.user.role !== ROLES.SUPERADMIN) throw httpError(403, "Only a superadmin can create admin accounts");
   const user = await User.create({ name, email, password, role, verified: true });
   audit(req.user, "user.created", user.email, `Created ${role} account`);

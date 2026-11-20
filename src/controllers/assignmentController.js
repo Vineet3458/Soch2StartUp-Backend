@@ -4,12 +4,13 @@ import { hasPermission } from "../services/configService.js";
 import { audit } from "../services/logger.js";
 import { notify } from "../services/notify.js";
 import { emit } from "../services/realtime.js";
-import { httpError, str, needId } from "../utils.js";
+import { httpError, str, needId, sanitizeQuery } from "../utils.js";
 
 const POP = [{ path: "idea", select: "title industry status report.score report.verdict user createdAt", populate: { path: "user", select: "name email" } }, { path: "assignee", select: "name role email" }];
 
 export const listAssignments = async (req, res) => {
-  const { kind, stage } = req.query;
+  const kind = sanitizeQuery(req.query.kind);
+  const stage = sanitizeQuery(req.query.stage);
   const filter = {};
   const all = ADMIN_ROLES.includes(req.user.role) && req.query.mine !== "true";
   if (!all) filter.assignee = req.user._id;

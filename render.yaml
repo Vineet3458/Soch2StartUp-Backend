@@ -1,0 +1,26 @@
+services:
+  - type: web
+    name: soch2startup-backend
+    runtime: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+      - key: MONGO_URI
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true
+      - key: JWT_EXPIRES_IN
+        value: 7d
+      - key: CLIENT_URL
+        sync: false
+      - key: ALLOW_VERCEL_PREVIEWS
+        value: "true"
+      - key: SERVE_CLIENT
+        value: "false"
