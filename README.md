@@ -9,6 +9,7 @@ npm run seed              # demo users + data for every role  (npm run seed -- -
 npm run dev               # http://localhost:5000
 npm test                  # run all 37 unit, security, and integration tests
 npm run test:unit         # run unit tests for the multi-model prediction council
+npm run lint              # syntax and static integrity check (0 errors)
 ```
 
 See the project-level `README.md` for architecture, features and demo accounts.
