@@ -3,5 +3,8 @@ node_modules
 .env.local
 .env.*.local
 .env.production
+.tmp/
 *.log
 coverage/
+.DS_Store
+Thumbs.db

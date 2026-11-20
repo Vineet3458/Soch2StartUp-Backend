@@ -7,7 +7,8 @@ cp .env.example .env      # then edit MONGO_URI / JWT_SECRET (and GEMINI_API_KEY
 npm install
 npm run seed              # demo users + data for every role  (npm run seed -- --reset wipes first)
 npm run dev               # http://localhost:5000
-npm test                  # integration tests (needs a MongoDB; uses the "soch2startup_test" database)
+npm test                  # run all 37 unit, security, and integration tests
+npm run test:unit         # run unit tests for the multi-model prediction council
 ```
 
 See the project-level `README.md` for architecture, features and demo accounts.
