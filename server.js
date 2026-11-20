@@ -49,12 +49,29 @@ app.use((req, res, next) => {
   next();
 });
 
-const allowedOrigins = (process.env.CLIENT_URL || "http://localhost:5173,http://127.0.0.1:5173")
+const configuredOrigins = (process.env.CLIENT_URL || "http://localhost:5173,http://127.0.0.1:5173")
   .split(",")
-  .map((o) => o.trim())
+  .map((o) => o.trim().replace(/\/+$/, ""))
   .filter(Boolean);
 
-app.use(cors({ origin: allowedOrigins, credentials: true, maxAge: 86400 }));
+const corsOriginHandler = (origin, callback) => {
+  // Allow requests without Origin (e.g. mobile apps, curl, server-to-server, Render health checks)
+  if (!origin) return callback(null, true);
+  const normalized = origin.trim().replace(/\/+$/, "");
+  if (configuredOrigins.includes(normalized) || configuredOrigins.includes("*")) {
+    return callback(null, true);
+  }
+  // Allow Vercel preview and production deployments if enabled or configured
+  if (
+    (process.env.ALLOW_VERCEL_PREVIEWS === "true" || configuredOrigins.some((c) => c.includes("vercel.app"))) &&
+    /^https:\/\/([a-zA-Z0-9_-]+\.)*vercel\.app$/.test(normalized)
+  ) {
+    return callback(null, true);
+  }
+  return callback(null, false);
+};
+
+app.use(cors({ origin: corsOriginHandler, credentials: true, maxAge: 86400 }));
 
 const globalApiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
