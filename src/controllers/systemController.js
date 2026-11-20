@@ -25,12 +25,15 @@ export const health = async (req, res) => {
   ]);
   const m = snapshot();
   const engine = getConfig("engine"), hook = getConfig("integrations").webhook;
-  const keyPresent = Boolean(process.env.GEMINI_API_KEY);
-  const aiStatus = !engine.enabled || !getConfig("features").aiValidation ? "disabled" : !keyPresent || engine.provider === "demo" ? "demo" : m.ai.lastOk === false ? "degraded" : "operational";
+  const mode = engine.mode || "council";
+  const keyPresent = mode === "council"
+    ? Boolean(process.env.OPENROUTER_API_KEY) && (engine.models || []).filter((x) => x.enabled).length >= 2
+    : Boolean(process.env.GEMINI_API_KEY);
+  const aiStatus = !engine.enabled || !getConfig("features").aiValidation ? "disabled" : !keyPresent || (mode !== "council" && engine.provider === "demo") ? "demo" : m.ai.lastOk === false ? "degraded" : "operational";
   const services = [
     { key: "api", name: "API server", status: "operational", detail: `${m.requests} requests · ${m.avgMs} ms avg` },
     { key: "db", name: "Database", status: db.ok ? "operational" : "down", detail: `${db.ms} ms ping` },
-    { key: "ai", name: "AI validation engine", status: aiStatus, detail: aiStatus === "demo" ? "Using built-in demo analysis" : m.ai.lastMs != null ? `Last call ${m.ai.lastMs} ms` : "Waiting for first call" },
+    { key: "ai", name: "AI validation engine", status: aiStatus, detail: aiStatus === "demo" ? (mode === "council" && !process.env.OPENROUTER_API_KEY ? "Council needs OPENROUTER_API_KEY – using demo analysis" : "Using built-in demo analysis") : m.ai.lastMs != null ? `Last call ${m.ai.lastMs} ms` : "Waiting for first call" },
     { key: "realtime", name: "Realtime stream", status: "operational", detail: `${clientCount()} open connections` },
     { key: "webhook", name: "Outgoing webhook", status: hook.enabled ? "operational" : "disabled", detail: hook.enabled ? hook.url : "Not configured" },
   ];

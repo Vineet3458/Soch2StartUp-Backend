@@ -16,6 +16,7 @@ import * as requests from "../controllers/requestController.js";
 import * as stats from "../controllers/statsController.js";
 import * as config from "../controllers/configController.js";
 import * as system from "../controllers/systemController.js";
+import * as live from "../controllers/liveDataController.js";
 
 const r = Router();
 const authLimiter = rateLimit({ windowMs: 15 * 60 * 1000, limit: 30, standardHeaders: "draft-7", legacyHeaders: false, message: { message: "Too many attempts. Please try again in a few minutes." } });
@@ -70,6 +71,10 @@ r.delete("/notifications/:id", notifications.removeOne);
 r.get("/stats/market", stats.marketStats);
 r.get("/stats/badges", stats.badges);
 r.get("/stats/admin", perm("analytics.view"), stats.adminStats);
+
+/* Live market signals (preview only - creating a report happens on idea submit) */
+const liveLimiter = rateLimit({ windowMs: 60 * 1000, limit: 10, standardHeaders: "draft-7", legacyHeaders: false, message: { message: "Too many live-data requests. Please wait a minute." } });
+r.post("/live-data/preview", liveLimiter, live.preview);
 
 /* Ideas */
 r.route("/ideas").get(ideas.listIdeas).post(aiLimiter, ideas.createIdea);

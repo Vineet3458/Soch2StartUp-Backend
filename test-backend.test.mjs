@@ -56,6 +56,12 @@ test("authorization: protected routes and role/permission checks", async () => {
   assert.equal((await call("GET", "/api/users", { token: tok.admin })).status, 200);
 });
 
+test("live data: preview endpoint is protected and validates input", async () => {
+  assert.equal((await call("POST", "/api/live-data/preview", { body: { title: "x", industry: "SaaS" } })).status, 401);
+  const bad = await call("POST", "/api/live-data/preview", { token: tok.f1, body: { title: "" } });
+  assert.equal(bad.status, 400);
+});
+
 test("ideas: founders see only their own; staff never see other people's drafts", async () => {
   const mine = (await call("GET", "/api/ideas", { token: tok.f1 })).data;
   assert.ok(mine.length >= 2); assert.ok(mine.every((i) => i.user.email === "entrepreneur@soch2startup.com"));
