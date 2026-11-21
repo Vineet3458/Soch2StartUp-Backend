@@ -19,11 +19,27 @@ export const publicUser = (u) => ({
 
 const sendAuth = (res, user, status = 200) => res.status(status).json({ token: signToken(user._id), user: publicUser(user) });
 
+const BREACHED_PASSWORDS = new Set([
+  "password", "password12", "password123", "password1234", "password12345", "password@123", "pass@1234",
+  "12345678", "123456789", "1234567890", "12345678a", "12345678b", "123456789a",
+  "admin123", "admin1234", "admin12345", "admin123456", "admin@123", "admin@1234", "admin@12345", "administrator",
+  "superadmin123", "superadmin@123", "superadmin@12345",
+  "founder123", "founder@123", "founder@1234", "founder@12345",
+  "mentor123", "mentor@123", "mentor@1234", "mentor@12345",
+  "expert123", "expert@123", "expert@1234", "expert@12345",
+  "moderator123", "moderator@123", "moderator@1234", "moderator@12345",
+  "qwerty123", "qwertyuiop", "welcome123", "welcome@123", "welcome1234", "letmein123",
+  "iloveyou123", "pass1234", "changeme123", "changeme@123", "soch2startup123", "startup123", "startup@123"
+]);
+
 export const validatePasswordStrength = (pw) => {
   if (typeof pw !== "string") return "Password is required";
   if (pw.length < 8) return "Password must be at least 8 characters";
   if (pw.length > 128) return "Password cannot exceed 128 characters";
   if (!/[A-Za-z]/.test(pw) || !/[0-9]/.test(pw)) return "Password must contain at least one letter and one number";
+  if (BREACHED_PASSWORDS.has(pw.toLowerCase().trim())) {
+    return "This password is known to be compromised in data breaches. Please choose a more secure password.";
+  }
   return null;
 };
 

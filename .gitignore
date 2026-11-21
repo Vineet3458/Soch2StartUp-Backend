@@ -2,11 +2,7 @@
 node_modules/
 
 # Environment variables & local secrets
-.env
-.env.local
 .env.*.local
-.env.production
-.env.staging
 
 # Runtime, temporary & database dumps
 .tmp/
@@ -15,6 +11,15 @@ logs/
 *.dump
 *.db
 *.sqlite
+data/
+db/
+mongo-data/
+*.seed.json
+seed-dump/
+seed-data/
+
+# Seeding script must remain tracked for teacher review and project setup
+!src/seed.js
 
 # Logs & debugging
 *.log
@@ -29,7 +34,6 @@ coverage/
 .cache/
 
 # IDE & Editor artifacts
-.vscode/
 .idea/
 *.suo
 *.ntvs*
@@ -40,3 +44,4 @@ coverage/
 # OS artifacts
 .DS_Store
 Thumbs.db
+config.bat

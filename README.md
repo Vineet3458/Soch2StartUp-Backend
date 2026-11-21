@@ -106,12 +106,12 @@ When seeded (`npm run seed`), the database includes test accounts for every plat
 
 | Role | Email | Password |
 | :--- | :--- | :--- |
-| **Founder (Entrepreneur)** | `entrepreneur@soch2startup.com` | `Founder@123` |
-| **Mentor** | `mentor@soch2startup.com` | `Mentor@123` |
-| **Industry Expert** | `expert@soch2startup.com` | `Expert@123` |
-| **Moderator** | `moderator@soch2startup.com` | `Moderator@123` |
-| **Admin** | `admin@soch2startup.com` | `Admin@12345` |
-| **Superadmin** | `superadmin@soch2startup.com` | `Admin@12345` |
+| **Founder (Entrepreneur)** | `entrepreneur@soch2startup.com` | `S2S#Founder!2026` |
+| **Mentor** | `mentor@soch2startup.com` | `S2S#Mentor!2026` |
+| **Industry Expert** | `expert@soch2startup.com` | `S2S#Expert!2026` |
+| **Moderator** | `moderator@soch2startup.com` | `S2S#Moderator!2026` |
+| **Admin** | `admin@soch2startup.com` | `S2S#Admin!2026` |
+| **Superadmin** | `superadmin@soch2startup.com` | `S2S#SuperAdmin!2026` |
 
 ---
 
