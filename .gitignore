@@ -15,6 +15,15 @@ logs/
 *.dump
 *.db
 *.sqlite
+data/
+db/
+mongo-data/
+*.seed.json
+seed-dump/
+seed-data/
+
+# Seeding script must remain tracked for teacher review and project setup
+!src/seed.js
 
 # Logs & debugging
 *.log

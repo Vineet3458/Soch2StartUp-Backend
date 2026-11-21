@@ -10,6 +10,7 @@ process.env.MONGO_URI = MONGO;
 process.env.JWT_SECRET = "test-secret";
 process.env.GEMINI_API_KEY = "";
 process.env.PORT = "0";
+process.env.NODE_ENV = "test";
 
 let base, server;
 const tok = {};
@@ -25,7 +26,7 @@ before(async () => {
   const { start } = await import("./server.js");
   server = await start();
   base = `http://127.0.0.1:${server.address().port}`;
-  for (const [k, e, p] of [["super", "superadmin@soch2startup.com", "Admin@12345"], ["admin", "admin@soch2startup.com", "Admin@12345"], ["mod", "moderator@soch2startup.com", "Moderator@123"], ["mentor", "mentor@soch2startup.com", "Mentor@123"], ["expert", "expert@soch2startup.com", "Expert@123"], ["f1", "entrepreneur@soch2startup.com", "Founder@123"], ["f4", "sana.khan@soch2startup.com", "Founder@123"]]) tok[k] = (await login(e, p)).token;
+  for (const [k, e, p] of [["super", "superadmin@soch2startup.com", "S2S#SuperAdmin!2026"], ["admin", "admin@soch2startup.com", "S2S#Admin!2026"], ["mod", "moderator@soch2startup.com", "S2S#Moderator!2026"], ["mentor", "mentor@soch2startup.com", "S2S#Mentor!2026"], ["expert", "expert@soch2startup.com", "S2S#Expert!2026"], ["f1", "entrepreneur@soch2startup.com", "S2S#Founder!2026"], ["f4", "sana.khan@soch2startup.com", "S2S#Founder!2026"]]) tok[k] = (await login(e, p)).token;
 });
 after(async () => { server?.close(); const m = (await import("mongoose")).default; await m.disconnect(); });
 
@@ -33,7 +34,7 @@ test("auth: login, bad password, NoSQL-injection object, blocked user", async ()
   assert.ok(tok.admin);
   assert.equal((await call("POST", "/api/auth/login", { body: { email: "admin@soch2startup.com", password: "nope" } })).status, 401);
   assert.equal((await call("POST", "/api/auth/login", { body: { email: { $gt: "" }, password: { $gt: "" } } })).status, 400);
-  const blocked = await call("POST", "/api/auth/login", { body: { email: "rahul.bansal@soch2startup.com", password: "Founder@123" } });
+  const blocked = await call("POST", "/api/auth/login", { body: { email: "rahul.bansal@soch2startup.com", password: "S2S#Founder!2026" } });
   assert.equal(blocked.status, 403);
   assert.match(blocked.data.message, /blocked/i);
 });
@@ -111,7 +112,7 @@ test("evaluation: score is computed server-side from criteria and completes the 
   const evalA = (await call("GET", "/api/assignments?kind=evaluation", { token: tok.expert })).data.find((a) => a.idea._id === quick._id);
   assert.equal(evalA.stage, "completed");
   assert.equal((await call("POST", `/api/feedback/${r.data._id}/dispute`, { token: tok.f4, body: { reason: "x" } })).status, 403); // not owner
-  const owner = (await login("kabir.singh@soch2startup.com", "Founder@123")).token;
+  const owner = (await login("kabir.singh@soch2startup.com", "S2S#Founder!2026")).token;
   assert.equal((await call("POST", `/api/feedback/${r.data._id}/dispute`, { token: owner, body: { reason: "x" } })).status, 400); // too short
   assert.equal((await call("POST", `/api/feedback/${r.data._id}/dispute`, { token: owner, body: { reason: "The scorecard misses our patent filing." } })).status, 200);
   const re = (await call("GET", "/api/assignments?reEval=true", { token: tok.expert })).data;
@@ -172,8 +173,8 @@ test("public config reflects platform settings (maintenance blocks non-admin log
   const p = (await call("GET", "/api/config", { token: tok.super })).data.platform;
   await call("PUT", "/api/config/platform", { token: tok.super, body: { ...p, name: "TestName", maintenance: { enabled: true, message: "Back soon" } } });
   assert.equal((await call("GET", "/api/config/public")).data.platform.name, "TestName");
-  assert.equal((await call("POST", "/api/auth/login", { body: { email: "entrepreneur@soch2startup.com", password: "Founder@123" } })).status, 503);
-  assert.equal((await call("POST", "/api/auth/login", { body: { email: "admin@soch2startup.com", password: "Admin@12345" } })).status, 200);
+  assert.equal((await call("POST", "/api/auth/login", { body: { email: "entrepreneur@soch2startup.com", password: "S2S#Founder!2026" } })).status, 503);
+  assert.equal((await call("POST", "/api/auth/login", { body: { email: "admin@soch2startup.com", password: "S2S#Admin!2026" } })).status, 200);
   await call("POST", "/api/config/platform/reset", { token: tok.super });
 });
 
@@ -234,6 +235,24 @@ test("security: password strength rules and bcrypt DoS defense", async () => {
   assert.equal((await call("POST", "/api/auth/register", { body: { name: "Weak", email: "weak3@x.com", password: "1234567890" } })).status, 400);
   // Bcrypt DoS defense (> 128 chars)
   assert.equal((await call("POST", "/api/auth/register", { body: { name: "Weak", email: "weak4@x.com", password: "A".repeat(129) + "1" } })).status, 400);
+  // Known breached passwords rejected
+  const breached1 = await call("POST", "/api/auth/register", { body: { name: "Weak", email: "weak5@x.com", password: "password123" } });
+  assert.equal(breached1.status, 400);
+  assert.match(breached1.data.message, /compromised in data breaches/i);
+  const breached2 = await call("POST", "/api/auth/register", { body: { name: "Weak", email: "weak6@x.com", password: "Admin@12345" } });
+  assert.equal(breached2.status, 400);
+  assert.match(breached2.data.message, /compromised in data breaches/i);
+  const breached3 = await call("POST", "/api/auth/register", { body: { name: "Weak", email: "weak7@x.com", password: "Founder@123" } });
+  assert.equal(breached3.status, 400);
+  assert.match(breached3.data.message, /compromised in data breaches/i);
+
+  // Admin user creation also rejects breached passwords
+  const userBreached = await call("POST", "/api/users", {
+    token: tok.admin,
+    body: { name: "BreachedUser", email: "breacheduser@x.com", password: "Mentor@123", role: "entrepreneur" }
+  });
+  assert.equal(userBreached.status, 400);
+  assert.match(userBreached.data.message, /compromised in data breaches/i);
 });
 
 test("security: stored XSS defense in session links", async () => {
@@ -314,6 +333,14 @@ test("security: JWT invalidation on password change", async () => {
   assert.equal((await call("GET", "/api/auth/me", { token: oldToken })).status, 200);
 
   await new Promise((r) => setTimeout(r, 50));
+
+  // Breached password change rejected
+  const badChange = await call("PATCH", "/api/auth/password", {
+    token: oldToken,
+    body: { currentPassword: "OriginalPass1", newPassword: "Admin@12345" }
+  });
+  assert.equal(badChange.status, 400);
+  assert.match(badChange.data.message, /compromised in data breaches/i);
 
   // Update password
   const changeRes = await call("PATCH", "/api/auth/password", {
