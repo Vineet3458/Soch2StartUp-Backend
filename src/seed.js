@@ -22,20 +22,20 @@ const ago = (days, hours = 0) => new Date(Date.now() - days * 86400000 - hours *
 const inDays = (d, h = 10) => { const x = new Date(Date.now() + d * 86400000); x.setHours(h, 0, 0, 0); return x; };
 
 const USERS = [
-  { key: "super", name: "Super Admin", email: process.env.SUPERADMIN_EMAIL || "superadmin@soch2startup.com", password: process.env.SUPERADMIN_PASSWORD || "Admin@12345", role: ROLES.SUPERADMIN, days: 40 },
-  { key: "admin", name: "Platform Admin", email: "admin@soch2startup.com", password: "Admin@12345", role: ROLES.ADMIN, days: 38 },
-  { key: "mod", name: "Content Moderator", email: "moderator@soch2startup.com", password: "Moderator@123", role: ROLES.MODERATOR, days: 30 },
-  { key: "mentor", name: "Rohan Sharma", email: "mentor@soch2startup.com", password: "Mentor@123", role: ROLES.MENTOR, days: 28, company: "Ex-Flipkart, Angel Investor", expertise: ["Go-to-market", "Fundraising", "E-commerce"], bio: "12 years building consumer products. Mentored 40+ early-stage founders." },
-  { key: "mentor2", name: "Priya Nair", email: "priya.nair@soch2startup.com", password: "Mentor@123", role: ROLES.MENTOR, days: 20, company: "Growth Partner, Lightspeed Scout", expertise: ["SaaS", "Pricing", "Product"], bio: "Product leader turned scout. Loves B2B SaaS and developer tools." },
-  { key: "expert", name: "Ananya Verma", email: "expert@soch2startup.com", password: "Expert@123", role: ROLES.EXPERT, days: 27, company: "Partner, Seed Fund", expertise: ["FinTech", "HealthTech", "Due diligence"], bio: "Early-stage VC evaluating 300+ decks a year." },
-  { key: "expert2", name: "Vikram Rao", email: "vikram.rao@soch2startup.com", password: "Expert@123", role: ROLES.EXPERT, days: 18, company: "Agri-food strategy consultant", expertise: ["AgriTech", "FoodTech", "Supply chain"], bio: "Operator and advisor across agri value chains." },
-  { key: "pending", name: "Neha Kapoor", email: "neha.kapoor@soch2startup.com", password: "Mentor@123", role: ROLES.MENTOR, days: 1, verified: false, expertise: ["EdTech"], bio: "Ex-teacher and edtech product manager awaiting verification." },
-  { key: "f1", name: "Aarav Patel", email: "entrepreneur@soch2startup.com", password: "Founder@123", role: ROLES.ENTREPRENEUR, days: 25, company: "KrishiMitra", location: "Pune" },
-  { key: "f2", name: "Meera Iyer", email: "meera.iyer@soch2startup.com", password: "Founder@123", role: ROLES.ENTREPRENEUR, days: 14, company: "LearnLoop", location: "Bengaluru" },
-  { key: "f3", name: "Kabir Singh", email: "kabir.singh@soch2startup.com", password: "Founder@123", role: ROLES.ENTREPRENEUR, days: 9, location: "Delhi" },
-  { key: "f4", name: "Sana Khan", email: "sana.khan@soch2startup.com", password: "Founder@123", role: ROLES.ENTREPRENEUR, days: 5, location: "Hyderabad" },
-  { key: "f5", name: "Dev Malhotra", email: "dev.malhotra@soch2startup.com", password: "Founder@123", role: ROLES.ENTREPRENEUR, days: 3, location: "Mumbai" },
-  { key: "blocked", name: "Rahul Bansal", email: "rahul.bansal@soch2startup.com", password: "Founder@123", role: ROLES.ENTREPRENEUR, days: 12, isActive: false, blockedReason: "Repeated spam submissions" },
+  { key: "super", name: "Super Admin", email: process.env.SUPERADMIN_EMAIL || "superadmin@soch2startup.com", password: process.env.SUPERADMIN_PASSWORD || "S2S#SuperAdmin!2026", role: ROLES.SUPERADMIN, days: 40 },
+  { key: "admin", name: "Platform Admin", email: "admin@soch2startup.com", password: process.env.ADMIN_PASSWORD || "S2S#Admin!2026", role: ROLES.ADMIN, days: 38 },
+  { key: "mod", name: "Content Moderator", email: "moderator@soch2startup.com", password: "S2S#Moderator!2026", role: ROLES.MODERATOR, days: 30 },
+  { key: "mentor", name: "Rohan Sharma", email: "mentor@soch2startup.com", password: "S2S#Mentor!2026", role: ROLES.MENTOR, days: 28, company: "Ex-Flipkart, Angel Investor", expertise: ["Go-to-market", "Fundraising", "E-commerce"], bio: "12 years building consumer products. Mentored 40+ early-stage founders." },
+  { key: "mentor2", name: "Priya Nair", email: "priya.nair@soch2startup.com", password: "S2S#Mentor!2026", role: ROLES.MENTOR, days: 20, company: "Growth Partner, Lightspeed Scout", expertise: ["SaaS", "Pricing", "Product"], bio: "Product leader turned scout. Loves B2B SaaS and developer tools." },
+  { key: "expert", name: "Ananya Verma", email: "expert@soch2startup.com", password: "S2S#Expert!2026", role: ROLES.EXPERT, days: 27, company: "Partner, Seed Fund", expertise: ["FinTech", "HealthTech", "Due diligence"], bio: "Early-stage VC evaluating 300+ decks a year." },
+  { key: "expert2", name: "Vikram Rao", email: "vikram.rao@soch2startup.com", password: "S2S#Expert!2026", role: ROLES.EXPERT, days: 18, company: "Agri-food strategy consultant", expertise: ["AgriTech", "FoodTech", "Supply chain"], bio: "Operator and advisor across agri value chains." },
+  { key: "pending", name: "Neha Kapoor", email: "neha.kapoor@soch2startup.com", password: "S2S#Mentor!2026", role: ROLES.MENTOR, days: 1, verified: false, expertise: ["EdTech"], bio: "Ex-teacher and edtech product manager awaiting verification." },
+  { key: "f1", name: "Aarav Patel", email: "entrepreneur@soch2startup.com", password: "S2S#Founder!2026", role: ROLES.ENTREPRENEUR, days: 25, company: "KrishiMitra", location: "Pune" },
+  { key: "f2", name: "Meera Iyer", email: "meera.iyer@soch2startup.com", password: "S2S#Founder!2026", role: ROLES.ENTREPRENEUR, days: 14, company: "LearnLoop", location: "Bengaluru" },
+  { key: "f3", name: "Kabir Singh", email: "kabir.singh@soch2startup.com", password: "S2S#Founder!2026", role: ROLES.ENTREPRENEUR, days: 9, location: "Delhi" },
+  { key: "f4", name: "Sana Khan", email: "sana.khan@soch2startup.com", password: "S2S#Founder!2026", role: ROLES.ENTREPRENEUR, days: 5, location: "Hyderabad" },
+  { key: "f5", name: "Dev Malhotra", email: "dev.malhotra@soch2startup.com", password: "S2S#Founder!2026", role: ROLES.ENTREPRENEUR, days: 3, location: "Mumbai" },
+  { key: "blocked", name: "Rahul Bansal", email: "rahul.bansal@soch2startup.com", password: "S2S#Founder!2026", role: ROLES.ENTREPRENEUR, days: 12, isActive: false, blockedReason: "Repeated spam submissions" },
 ];
 
 const IDEAS = [
@@ -60,11 +60,19 @@ const run = async () => {
 
   const U = {};
   for (const u of USERS) {
-    let doc = await User.findOne({ email: u.email.toLowerCase() });
+    let doc = await User.findOne({ email: u.email.toLowerCase() }).select("+password");
     if (!doc) {
       const { days, ...rest } = u;
       delete rest.key;
       doc = await User.create({ ...rest, verified: rest.verified ?? true, createdAt: ago(days), lastLoginAt: ago(Math.random() * 3) });
+    } else {
+      // Migrate existing seeded users to secure non-breached passwords if necessary
+      const matches = await doc.matchPassword(u.password);
+      if (!matches) {
+        doc.password = u.password;
+        await doc.save();
+        console.log(`Updated password for ${u.email} to non-breached password`);
+      }
     }
     U[u.key] = doc;
   }

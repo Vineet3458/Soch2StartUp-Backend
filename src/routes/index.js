@@ -19,7 +19,7 @@ import * as system from "../controllers/systemController.js";
 import * as live from "../controllers/liveDataController.js";
 
 const r = Router();
-const authLimiter = rateLimit({ windowMs: 15 * 60 * 1000, limit: 30, standardHeaders: "draft-7", legacyHeaders: false, message: { message: "Too many attempts. Please try again in a few minutes." } });
+const authLimiter = rateLimit({ windowMs: 15 * 60 * 1000, limit: process.env.NODE_ENV === "test" ? 1000 : 30, standardHeaders: "draft-7", legacyHeaders: false, message: { message: "Too many attempts. Please try again in a few minutes." } });
 const aiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   limit: 30,
