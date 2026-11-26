@@ -2,7 +2,11 @@
 node_modules/
 
 # Environment variables & local secrets
+.env
+.env.local
 .env.*.local
+.env.production
+.env.staging
 
 # Runtime, temporary & database dumps
 .tmp/
@@ -34,6 +38,7 @@ coverage/
 .cache/
 
 # IDE & Editor artifacts
+.vscode/
 .idea/
 *.suo
 *.ntvs*
@@ -44,4 +49,3 @@ coverage/
 # OS artifacts
 .DS_Store
 Thumbs.db
-config.bat
